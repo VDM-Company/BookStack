@@ -18,7 +18,6 @@
     <server name="CACHE_DRIVER" value="array"/>
     <server name="SESSION_DRIVER" value="array"/>
     <server name="QUEUE_CONNECTION" value="sync"/>
-    <server name="DB_CONNECTION" value="mysql_testing"/>
     <server name="BCRYPT_ROUNDS" value="4"/>
     <server name="MAIL_DRIVER" value="array"/>
     <server name="MAIL_VERIFY_SSL" value="true"/>
