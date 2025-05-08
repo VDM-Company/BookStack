@@ -14,7 +14,7 @@
     </div>
 
     <div class="container py-xl">
-        <h1>Test</h1>
+        <h1>This is custom vdm theme</h1>
         <h4>Everything you need to know to assist our customers</h4>
     </div>
 
