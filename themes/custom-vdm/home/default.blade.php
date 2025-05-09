@@ -18,10 +18,10 @@
         <h4>Everything you need to know to assist our customers</h4>
     </div>
 
-    {{-- <div class="container" id="home-default">
+    <div class="container" id="home-default">
         
         <!-- Important Updates Section -->
-        <div class="card content-wrap mb-xl">
+        {{-- <div class="card content-wrap mb-xl">
             <h2 class="list-heading">Important Updates</h2>
 
             <div class="px-m">
