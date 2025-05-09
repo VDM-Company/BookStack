@@ -291,22 +291,4 @@
 @stop
 
 @section('body-end')
-<script nonce="{{ $cspNonce ?? '' }}">
-    document.addEventListener('DOMContentLoaded', function() {
-        var calendarToggle = document.getElementById('calendar-toggle');
-        if (calendarToggle) {
-            calendarToggle.addEventListener('click', function(event) {
-                event.preventDefault();
-                var content = document.getElementById('calendar-dropdown');
-                if (content.style.display === 'none') {
-                    content.style.display = 'block';
-                    this.classList.add('active');
-                } else {
-                    content.style.display = 'none';
-                    this.classList.remove('active');
-                }
-            });
-        }
-    });
-</script>
 @stop
