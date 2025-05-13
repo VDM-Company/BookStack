@@ -26,6 +26,26 @@
         display: contents; /* Makes the <a> take up the space of its children for clickability */
     }
 </style>
+
+    <div class="card content-wrap">
+        <h2 class="list-heading">Important Updates</h2>
+            <div class="page-content">
+                @php
+                    $importantUpdatesPage = \BookStack\Entities\Models\Page::query()
+                        ->where('slug', 'updates-to-be-shown-at-main-page')
+                        ->whereHas('book', function($query) {
+                            $query->where('slug', 'general-updates');
+                        })
+                        ->first();
+                    if ($importantUpdatesPage) {
+                        echo $importantUpdatesPage->html; 
+                    } else {
+                        echo '<p>Stay tuned for more updates.</p>';
+                    }
+                @endphp
+            </div>
+    </div>
+
     <!-- Search by Category Section -->
     <div class="card content-wrap mb-xl">
         <h2 class="list-heading">Categories</h2><br/>
