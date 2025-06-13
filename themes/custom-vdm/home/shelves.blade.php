@@ -186,6 +186,9 @@
                             <input type="radio" name="tabs" id="tab-input-{{ $chapter->id }}" class="tab-input" {{ $index === 0 ? 'checked' : '' }}>
                             <label for="tab-input-{{ $chapter->id }}" class="tab-label" data-tab-target="tab-{{ $chapter->id }}">{{ $chapter->name }}</label>
                         @endforeach
+                        
+                            <a href="{{ url('/books/important-updates/') }}" style="text-decoration: none;" target="_blank"><label class="tab-label">View All Contents</label></a>
+                        
                     </div>
                     <div class="tabs-content">
                         @foreach($chapters as $index => $chapter)
@@ -196,6 +199,7 @@
                                         ->orderBy('created_at', 'desc')
                                         ->take(5)
                                         ->get();
+                                    
                                 @endphp
                                 
                                 @if(count($pages) > 0)
@@ -204,7 +208,11 @@
                                             <div class="page-item">
                                                 <input type="checkbox" id="page-toggle-{{ $page->id }}" class="page-toggle-input">
                                                 <label for="page-toggle-{{ $page->id }}" class="page-toggle-label">
-                                                    <span class="page-title">{{ $page->name }}</span>
+                                                    <span class="page-title">{{ $page->name }}
+                                                        @if(auth()->check())
+                                                            <a href="{{ url('/books/important-updates/page/' . $page->slug . '/edit') }}" class="btn btn-primary btn-sm" style="margin-top: 8px;">Edit</a>
+                                                        @endif
+                                                    </span>
                                                     <span class="page-toggle-icon">+</span>
                                                 </label>
                                                 <div class="page-content">
@@ -237,7 +245,7 @@
             
             <!-- Row 1 -->
             <div class="category-card text-center">
-                <a href="#" class="text-link">
+                <a href="/books/replacementplan-change" class="text-link" target="_blank">
                     <div class="mb-s">
                         <img src="/images/icons/replacement-plan-change.svg" alt="Replacement/Plan Change" style="width: 96px; height: 96px;">
                     </div>
@@ -245,21 +253,22 @@
                 </a>
             </div>
             <div class="category-card text-center">
-                <a href="#" class="text-link">
+                <a href="/books/home-hikari" class="text-link" target="_blank">
                     <div class="mb-s">
-                        <img src="/images/icons/home-hikari.svg" alt="HOME Hikari" style="width: 96px; height: 96px;">
+                        <img src="/images/icons/home-hikari.svg" alt="Home Hikari" style="width: 96px; height: 96px;">
                     </div>
-                    HOME Hikari
+                    Home Hikari
                 </a>
             </div>
             <div class="category-card text-center">
-                <a href="#" class="text-link">
+                <a href="/books/pocket-wifi" class="text-link" target="_blank">
                     <div class="mb-s">
                         <img src="/images/icons/pocket-wifi.svg" alt="Pocket WiFi" style="width: 96px; height: 96px;">
                     </div>
                     Pocket WiFi
                 </a>
             </div>
+            <!-- Additional cards for other links would follow the same pattern -->
             
             <!-- Row 2 -->
             <div class="category-card text-center">
