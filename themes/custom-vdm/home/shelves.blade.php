@@ -272,7 +272,7 @@
             
             <!-- Row 2 -->
             <div class="category-card text-center">
-                <a href="#" class="text-link">
+                <a href="/books/sim-card" class="text-link">
                     <div class="mb-s">
                         <img src="/images/icons/sim-card.svg" alt="SIM Card" style="width: 96px; height: 96px;">
                     </div>
@@ -280,7 +280,7 @@
                 </a>
             </div>
             <div class="category-card text-center">
-                <a href="#" class="text-link">
+                <a href="/books/sim-card-apn-settings" class="text-link">
                     <div class="mb-s">
                         <img src="/images/icons/sim-card-apn-settings.svg" alt="SIM Card APN Settings" style="width: 96px; height: 96px;">
                     </div>
@@ -288,7 +288,7 @@
                 </a>
             </div>
             <div class="category-card text-center">
-                <a href="#" class="text-link">
+                <a href="/books/apps-kintone-crm-etc" class="text-link">
                     <div class="mb-s">
                         <img src="/images/icons/apps.svg" alt="Apps (Untone, CRM, etc.)" style="width: 96px; height: 96px;">
                     </div>
@@ -298,7 +298,7 @@
             
             <!-- Row 3 -->
             <div class="category-card text-center">
-                <a href="#" class="text-link">
+                <a href="/books/payments" class="text-link">
                     <div class="mb-s">
                         <img src="/images/icons/payments.svg" alt="Payments" style="width: 96px; height: 96px;">
                     </div>
@@ -306,7 +306,7 @@
                 </a>
             </div>
             <div class="category-card text-center">
-                <a href="#" class="text-link">
+                <a href="/books/discountsfees" class="text-link">
                     <div class="mb-s">
                         <img src="/images/icons/discount-fees.svg" alt="Discounts/Fees" style="width: 96px; height: 96px;">
                     </div>
@@ -314,7 +314,7 @@
                 </a>
             </div>
             <div class="category-card text-center">
-                <a href="#" class="text-link">
+                <a href="/books/general" class="text-link">
                     <div class="mb-s">
                         <img src="/images/icons/general.svg" alt="General" style="width: 96px; height: 96px;">
                     </div>
