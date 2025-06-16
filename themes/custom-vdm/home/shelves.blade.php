@@ -157,6 +157,24 @@
     .page-toggle-input:checked + .page-toggle-label .page-toggle-icon {
         transform: rotate(45deg);
     }
+
+    /* Tag Styles */
+    .label-info {
+        background-color: #077b70;
+        border: none;
+        color: white;
+        padding: 4px 8px;
+    
+        text-align: center;
+        text-decoration: none;
+        display: inline-block;
+        font-size: 1rem;
+        font-weight: 500;
+
+        margin: 4px 2px;
+        cursor: pointer;
+        border-radius: 20px;
+    }
 </style>
 
     <div class="card content-wrap mb-xl">
@@ -175,6 +193,16 @@
                         ->where('book_id', $updatesBook->id)
                         ->orderBy('priority', 'asc')
                         ->get();
+
+                    // Move the chapter named "General" to the first position if it exists
+                    $generalChapterIndex = $chapters->search(function($chapter) {
+                        return strtolower($chapter->name) === 'general';
+                    });
+                    
+                    if ($generalChapterIndex !== false && $generalChapterIndex !== 0) {
+                        $generalChapter = $chapters->pull($generalChapterIndex);
+                        $chapters->prepend($generalChapter);
+                    }
                 }
             @endphp
 
@@ -195,26 +223,53 @@
                             <div class="tab-pane" id="tab-{{ $chapter->id }}" data-tab-id="tab-for-input-{{ $chapter->id }}" style="{{ $index === 0 ? 'display: block;' : '' }}">
                                 @php
                                     $pages = \BookStack\Entities\Models\Page::query()
+                                        ->with('tags')
                                         ->where('chapter_id', $chapter->id)
                                         ->orderBy('created_at', 'desc')
                                         ->take(5)
-                                        ->get();
-                                    
-                                @endphp
-                                
+                                        ->get();          
+                                        
+                                    $tagStyles = [
+                                        'update' => '#077b70',
+                                    ];
+                                @endphp                                
                                 @if(count($pages) > 0)
                                     <div class="page-list">
                                         @foreach($pages as $page)
                                             <div class="page-item">
                                                 <input type="checkbox" id="page-toggle-{{ $page->id }}" class="page-toggle-input">
                                                 <label for="page-toggle-{{ $page->id }}" class="page-toggle-label">
-                                                    <span class="page-title">{{ $page->name }}
-                                                        @if(auth()->check())
-                                                            <a href="{{ url('/books/important-updates/page/' . $page->slug . '/edit') }}" class="btn btn-primary btn-sm" style="margin-top: 8px;">Edit</a>
-                                                        @endif
+                                                    <span class="page-title">
+
+                                                        @if($page->tags->isNotEmpty())
+                                                        @foreach($page->tags as $tag)
+                                                          @php $key = strtolower($tag->name); @endphp
+                                                  
+                                                          @if(array_key_exists($key, $tagStyles))
+                                                            <span
+                                                              class="tag label label-info"
+                                                              style="background-color: {{ $tagStyles[$key] }};">
+                                                              {{ $tag->name }}
+                                                            </span>
+                                                          @endif
+                                                        @endforeach
+                                                      @endif
+
+                                                      {{ $page->name }}
+                                                  
+                                                      @if(auth()->check())
+                                                        <a href="{{ url('/books/important-updates/page/' . $page->slug . '/edit') }}"
+                                                           class="btn btn-primary btn-sm"
+                                                           style="margin-top: 8px;">
+                                                          Edit
+                                                        </a>
+                                                      @endif
+                                                      
                                                     </span>
+                                                  
                                                     <span class="page-toggle-icon">+</span>
-                                                </label>
+                                                  </label>
+                                                  
                                                 <div class="page-content">
                                                     {!! $page->html !!}
                                                 </div>
@@ -242,96 +297,41 @@
     <div class="card content-wrap mb-xl">
         <h2 class="list-heading">Categories</h2><br/>
         <div class="grid second gap-sm" style="display: grid; grid-template-columns: repeat(4, 1fr); grid-auto-rows: minmax(0, auto);">
-            
-            <!-- Row 1 -->
-            <div class="category-card text-center">
-                <a href="/books/replacementplan-change" class="text-link" target="_blank">
-                    <div class="mb-s">
-                        <img src="/images/icons/replacement-plan-change.svg" alt="Replacement/Plan Change" style="width: 96px; height: 96px;">
-                    </div>
-                    Replacement/Plan Change
-                </a>
-            </div>
-            <div class="category-card text-center">
-                <a href="/books/home-hikari" class="text-link" target="_blank">
-                    <div class="mb-s">
-                        <img src="/images/icons/home-hikari.svg" alt="Home Hikari" style="width: 96px; height: 96px;">
-                    </div>
-                    Home Hikari
-                </a>
-            </div>
-            <div class="category-card text-center">
-                <a href="/books/pocket-wifi" class="text-link" target="_blank">
-                    <div class="mb-s">
-                        <img src="/images/icons/pocket-wifi.svg" alt="Pocket WiFi" style="width: 96px; height: 96px;">
-                    </div>
-                    Pocket WiFi
-                </a>
-            </div>
-            <!-- Additional cards for other links would follow the same pattern -->
-            
-            <!-- Row 2 -->
-            <div class="category-card text-center">
-                <a href="/books/sim-card" class="text-link">
-                    <div class="mb-s">
-                        <img src="/images/icons/sim-card.svg" alt="SIM Card" style="width: 96px; height: 96px;">
-                    </div>
-                    SIM Card
-                </a>
-            </div>
-            <div class="category-card text-center">
-                <a href="/books/sim-card-apn-settings" class="text-link">
-                    <div class="mb-s">
-                        <img src="/images/icons/sim-card-apn-settings.svg" alt="SIM Card APN Settings" style="width: 96px; height: 96px;">
-                    </div>
-                    SIM Card APN Settings
-                </a>
-            </div>
-            <div class="category-card text-center">
-                <a href="/books/apps-kintone-crm-etc" class="text-link">
-                    <div class="mb-s">
-                        <img src="/images/icons/apps.svg" alt="Apps (Untone, CRM, etc.)" style="width: 96px; height: 96px;">
-                    </div>
-                    Apps (Kintone, CRM, etc.)
-                </a>
-            </div>
-            
-            <!-- Row 3 -->
-            <div class="category-card text-center">
-                <a href="/books/payments" class="text-link">
-                    <div class="mb-s">
-                        <img src="/images/icons/payments.svg" alt="Payments" style="width: 96px; height: 96px;">
-                    </div>
-                    Payments
-                </a>
-            </div>
-            <div class="category-card text-center">
-                <a href="/books/discountsfees" class="text-link">
-                    <div class="mb-s">
-                        <img src="/images/icons/discount-fees.svg" alt="Discounts/Fees" style="width: 96px; height: 96px;">
-                    </div>
-                    Discounts/Fees
-                </a>
-            </div>
-            <div class="category-card text-center">
-                <a href="/books/general" class="text-link">
-                    <div class="mb-s">
-                        <img src="/images/icons/general.svg" alt="General" style="width: 96px; height: 96px;">
-                    </div>
-                    General
-                </a>
-            </div>
-            
-            <!-- Row 4 -->
-            <div class="category-card text-center">
-                <a href="#" class="text-link">
-                    <div class="mb-s">
-                        <img src="/images/icons/others.svg" alt="Others" style="width: 96px; height: 96px;">
-                    </div>
-                    Others
-                </a>
-            </div>
+            @php
+                $categoryBooks = \BookStack\Entities\Models\Book::query()
+                    ->whereHas('shelves', function($query) {
+                        $query->where('name', 'categories');
+                    })
+                    ->get();
 
+                    // Move the book named "General" to the first position if it exists
+                    $generalCategoryIndex = $categoryBooks->search(function($categoryBook) {
+                        return strtolower($categoryBook->name) === 'general';
+                    });
+                    
+                    if ($generalCategoryIndex !== false && $generalCategoryIndex !== 0) {
+                        $categoryBook = $categoryBooks->pull($generalCategoryIndex);
+                        $categoryBooks->prepend($categoryBook);
+                    }
+            @endphp
+
+            @foreach($categoryBooks as $book)
+            <a href="{{ url('/books/' . $book->slug) }}" class="text-link" target="_blank">
+                <div class="category-card text-center">
+                    
+                        {{-- <div class="mb-s">
+                            @if($book->cover_image)
+                                <img src="{{ $book->cover_image }}" alt="{{ $book->name }}" style="width: 96px; height: 96px; object-fit: cover;">
+                            @else
+                                <img src="/images/icons/book.svg" alt="{{ $book->name }}" style="width: 96px; height: 96px;">
+                            @endif
+                        </div> --}}
+
+                        {{ $book->name }}
+                    
+                </div>
+            </a>
+            @endforeach
         </div>
     </div>
 
