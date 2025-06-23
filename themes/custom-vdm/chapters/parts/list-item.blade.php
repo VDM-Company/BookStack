@@ -85,8 +85,6 @@
     margin-top: 8px;
     padding-bottom: 8px; // Add some space if dropdown follows 
 } */
-
-
 </style>
 
 <div class="folder-card" data-entity-type="chapter" data-entity-id="{{$chapter->id}}">

@@ -44,11 +44,9 @@
     .chapter-description {
         margin-bottom: 20px;
     }
-</style>
 
-<style>
-    /* CSS-only Tab System */
-    .tab-input {
+        /* CSS-only Tab System */
+        .tab-input {
         display: none; /* Hide radio buttons */
     }
     
@@ -157,6 +155,10 @@
     .page-toggle-input:checked + .page-toggle-label .page-toggle-icon {
         transform: rotate(45deg);
     }
+</style>
+
+<style>
+
 
     /* Tag Styles */
     .label-info {
