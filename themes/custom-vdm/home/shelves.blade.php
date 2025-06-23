@@ -296,7 +296,7 @@
     </div>
 
     <!-- Search by Category Section -->
-    <div class="card content-wrap mb-xl">
+    {{-- <div class="card content-wrap mb-xl">
         <h2 class="list-heading">Categories</h2><br/>
         <div class="grid second gap-sm" style="display: grid; grid-template-columns: repeat(4, 1fr); grid-auto-rows: minmax(0, auto);">
             @php
@@ -320,14 +320,6 @@
             @foreach($categoryBooks as $book)
             <a href="{{ url('/books/' . $book->slug) }}" class="text-link" target="_blank">
                 <div class="category-card text-center">
-                    
-                        {{-- <div class="mb-s">
-                            @if($book->cover_image)
-                                <img src="{{ $book->cover_image }}" alt="{{ $book->name }}" style="width: 96px; height: 96px; object-fit: cover;">
-                            @else
-                                <img src="/images/icons/book.svg" alt="{{ $book->name }}" style="width: 96px; height: 96px;">
-                            @endif
-                        </div> --}}
 
                         {{ $book->name }}
                     
@@ -335,7 +327,7 @@
             </a>
             @endforeach
         </div>
-    </div>
+    </div> --}}
 
     @include('shelves.parts.list', ['shelves' => $shelves, 'view' => $view])
 @stop
