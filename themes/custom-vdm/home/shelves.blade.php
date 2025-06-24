@@ -179,7 +179,7 @@
     }
 </style>
 
-    <div class="card content-wrap mb-xl">
+    {{-- <div class="card content-wrap mb-xl">
         <h2 class="list-heading">Important Updates</h2>
         <div class="page-content" style="max-height: none; padding: 15px;">
             @php
@@ -293,7 +293,7 @@
                 </div>
             @endif
         </div>
-    </div>
+    </div> --}}
 
     <!-- Search by Category Section -->
     {{-- <div class="card content-wrap mb-xl">
