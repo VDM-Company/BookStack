@@ -131,7 +131,7 @@
                                         @endisset
                                     @endforeach
         
-                                    {{-- “Important Updates – {Page} – {Book}” --}}
+                                    {{-- “Important Updates > {Page} – {Book}” --}}
                                     &nbsp;{{ $page->name }}&nbsp;>&nbsp;{{ $page->book->name }}
         
                                     {{-- quick-edit link --}}
