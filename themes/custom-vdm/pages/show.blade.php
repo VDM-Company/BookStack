@@ -201,19 +201,19 @@
         <div class="revision-section mt-m">
             <h5>Versions</h5>
             <div class="revision-list">
-                @foreach($page->revisions()->orderBy('created_at', 'desc')->take(10)->get() as $revision)
-                    <div class="revision-list-item {{ $page->revision_count === $revision->revision_number ? 'active' : '' }}" 
+                @foreach($page->revisions()->whereNotNull('summary')->where('summary', '!=', '')->orderBy('created_at', 'desc')->take(10)->get() as $revision)
+                    <div class="revision-list-item {{ $page->revision_count === $revision->revision_number ? 'active' : '' }}"
                          data-revision-id="{{ $revision->id }}" >
                         <div>
                             <span class="revision-number">#{{ $revision->revision_number }} - </span>
-                            <span class="revision-name">{{ $revision->summary ? Str::limit($revision->summary, 30) : 'No summary' }}</span>                                            
+                            <span class="revision-name">{{ Str::limit($revision->summary, 30) }}</span>                                            
                         </div>                        
                         <div class="revision-date">{{ $revision->created_at->diffForHumans() }}</div>
-                        <div class="additional-links">     
+                        <div class="additional-links">    
                             <a href="/books/{{ $page->book->slug }}/page/{{ $page->slug }}/revisions/{{ $revision->id }}" target="_blank"><span class="revision-link">Preview</span></a>
                             <span class="text-muted opacity-70">&nbsp;|&nbsp;</span>&nbsp;    
                             <a href="/books/{{ $page->book->slug }}/page/{{ $page->slug }}/revisions/{{ $revision->id }}/changes" target="_blank"><span class="revision-changes">Changes</span></a>
-                        </div>                                           
+                        </div>                                          
                     </div>
                 @endforeach
             </div>
