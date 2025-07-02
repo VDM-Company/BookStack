@@ -7,6 +7,37 @@
        padding: 4px 8px;    
        border-radius: 20px;
    }
+   
+    /* Revision list styles */
+    .revision-list {
+        max-height: 300px;
+        overflow-y: auto;
+        border: 1px solid #ddd;
+        border-radius: 4px;
+        margin-bottom: 1rem;
+    }
+    .revision-list-item {
+        padding: 8px 12px;
+        border-bottom: 1px solid #eee;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+    }
+    .revision-list-item > .additional-links {
+        display: none;
+    }
+
+    .revision-list-item:hover {
+        background-color: #f7f7f7;        
+    }
+    .revision-list-item.active {
+        background-color: #e7f3ff;
+    }
+
+    .revision-list-item:hover > .additional-links {
+        display: flex;
+    }
 </style>
 
 @extends('layouts.tri')
@@ -162,6 +193,33 @@
                     <div>{{ trans('entities.pages_is_template') }}</div>
                 </div>
             @endif
+        </div>
+        
+        <br>
+
+        <!-- New Revision List Section -->
+        <div class="revision-section mt-m">
+            <h5>Versions</h5>
+            <div class="revision-list">
+                @foreach($page->revisions()->orderBy('created_at', 'desc')->take(10)->get() as $revision)
+                    <div class="revision-list-item {{ $page->revision_count === $revision->revision_number ? 'active' : '' }}" 
+                         data-revision-id="{{ $revision->id }}" >
+                        <div>
+                            <span class="revision-number">#{{ $revision->revision_number }} - </span>
+                            <span class="revision-name">{{ $revision->summary ? Str::limit($revision->summary, 30) : 'No summary' }}</span>                                            
+                        </div>                        
+                        <div class="revision-date">{{ $revision->created_at->diffForHumans() }}</div>
+                        <div class="additional-links">     
+                            <a href="/books/{{ $page->book->slug }}/page/{{ $page->slug }}/revisions/{{ $revision->id }}" target="_blank"><span class="revision-link">Preview</span></a>
+                            <span class="text-muted opacity-70">&nbsp;|&nbsp;</span>&nbsp;    
+                            <a href="/books/{{ $page->book->slug }}/page/{{ $page->slug }}/revisions/{{ $revision->id }}/changes" target="_blank"><span class="revision-changes">Changes</span></a>
+                        </div>                                           
+                    </div>
+                @endforeach
+            </div>
+            <div class="text-right mt-s">
+                <a href="{{ $page->getUrl('/revisions') }}" class="text-small">{{ trans('common.view_all') }}</a>
+            </div>
         </div>
     </div>
 
