@@ -205,7 +205,7 @@
                     <div class="revision-list-item {{ $page->revision_count === $revision->revision_number ? 'active' : '' }}"
                          data-revision-id="{{ $revision->id }}" >
                         <div>
-                            <span class="revision-number">#{{ $revision->revision_number }} - </span>
+                            {{-- <span class="revision-number">#{{ $revision->revision_number }} - </span> --}}
                             <span class="revision-name">{{ Str::limit($revision->summary, 30) }}</span>                                            
                         </div>                        
                         <div class="revision-date">{{ $revision->created_at->diffForHumans() }}</div>

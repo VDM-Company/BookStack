@@ -88,13 +88,12 @@
 
         <div class="flex-container-row wrap v-center">
             <h1 class="flex fit-content break-text">{{ $shelf->name }}</h1>
-            <div class="flex"></div>
             <div class="flex fit-content text-m-right my-m ml-m">
                 @include('common.sort', $listOptions->getSortControlData())
             </div>
         </div>
 
-        <div class="flex-container-row wrap v-center">
+        <div class="flex-container-column wrap v-center">
             <h2 class="list-heading mb-s">Important Updates</h2>
         
             @php
@@ -111,8 +110,7 @@
             @if ($updatePages->isNotEmpty())
                 <div class="page-list">
                     @foreach ($updatePages as $page)
-                        <div class="page-item"> 
-        
+                        <div class="page-item">         
                             <input  type="checkbox"
                                     id="page-toggle-{{ $page->id }}"
                                     class="page-toggle-input">
