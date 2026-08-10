@@ -51,6 +51,35 @@
   transform: scale(1);
 }
 
+/**
+ * Zoomed state.
+ *
+ * Panning is native scrolling on the stage rather than a transform, which
+ * gets touch panning and keyboard scrolling for free and keeps the maths to
+ * one scrollLeft assignment.
+ */
+.rl-zoomable .rl-img {
+  cursor: zoom-in;
+}
+
+.rl-zoomed .rl-stage {
+  overflow: auto;
+  align-items: flex-start;
+  justify-content: flex-start;
+}
+
+.rl-zoomed .rl-img {
+  max-width: none;
+  max-height: none;
+  margin: auto;
+  cursor: grab;
+  transform: none;
+}
+
+.rl-panning .rl-img {
+  cursor: grabbing;
+}
+
 /* Controls. Kept off the image itself so they never sit on top of content. */
 .rl-btn {
   position: absolute;

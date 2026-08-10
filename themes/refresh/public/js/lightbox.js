@@ -191,16 +191,143 @@
         next.addEventListener('click', function() {
             step(1);
         });
+        stage.addEventListener('pointerdown', onPointerDown);
+        stage.addEventListener('pointermove', onPointerMove);
+        stage.addEventListener('pointerup', onPointerUp);
+        stage.addEventListener('pointercancel', onPointerUp);
+        window.addEventListener('resize', function() {
+            if (state.open && !state.zoomed) {
+                updateZoomAffordance();
+            }
+        });
     }
 
     function onOverlayClick(event) {
+        // A pan ends in a click event; that click is not a click.
+        if (state.dragged) {
+            state.dragged = false;
+            return;
+        }
+        if (event.target === ui.img) {
+            toggleZoom(event.clientX, event.clientY);
+            return;
+        }
         if (event.target === ui.root || event.target === ui.stage) {
             close();
         }
     }
 
+    /**
+     * Decide whether zooming would show the user anything.
+     *
+     * Only meaningful in fit mode — once zoomed, clientWidth IS the natural
+     * width, so the comparison would always come out false.
+     */
+    function updateZoomAffordance() {
+        var img = ui.img;
+        state.zoomable = !state.zoomed
+            && img.naturalWidth > 0
+            && (img.naturalWidth > img.clientWidth + 1
+                || img.naturalHeight > img.clientHeight + 1);
+        ui.root.classList.toggle('rl-zoomable', state.zoomable);
+    }
+
     function onImageLoad() {
-        // Placeholder for the zoom affordance added in Task 4.
+        updateZoomAffordance();
+    }
+
+    function resetZoom() {
+        state.zoomed = false;
+        state.zoomable = false;
+        ui.root.classList.remove('rl-zoomed', 'rl-panning');
+        ui.stage.scrollTop = 0;
+        ui.stage.scrollLeft = 0;
+    }
+
+    /**
+     * Switch between fit-to-viewport and actual size.
+     *
+     * Zooming keeps the point that was clicked under the cursor: the click is
+     * converted to a 0..1 position within the image, then the stage is
+     * scrolled so that position sits in the middle. Reading scrollWidth after
+     * the class change forces the layout, so the new dimensions are already
+     * correct.
+     */
+    function toggleZoom(clientX, clientY) {
+        if (state.zoomed) {
+            resetZoom();
+            updateZoomAffordance();
+            return;
+        }
+        if (!state.zoomable) {
+            return;
+        }
+        var rect = ui.img.getBoundingClientRect();
+        var ratioX = rect.width ? (clientX - rect.left) / rect.width : 0.5;
+        var ratioY = rect.height ? (clientY - rect.top) / rect.height : 0.5;
+
+        state.zoomed = true;
+        state.zoomable = false;
+        ui.root.classList.add('rl-zoomed');
+        ui.root.classList.remove('rl-zoomable');
+
+        var stage = ui.stage;
+        stage.scrollLeft = (stage.scrollWidth * ratioX) - (stage.clientWidth / 2);
+        stage.scrollTop = (stage.scrollHeight * ratioY) - (stage.clientHeight / 2);
+    }
+
+    /* Below this, a pointer gesture is a click; above it, a pan. */
+    var DRAG_SLOP = 5;
+
+    var drag = null;
+
+    /**
+     * Mouse drag pans by scrolling the stage. Touch is left to the browser:
+     * the stage is a scroll container when zoomed, so a finger already pans
+     * it natively, and intercepting would fight that.
+     */
+    function onPointerDown(event) {
+        state.dragged = false;
+        if (event.button !== 0 || event.pointerType !== 'mouse') {
+            return;
+        }
+        if (!state.zoomed || event.target !== ui.img) {
+            return;
+        }
+        drag = {
+            id: event.pointerId,
+            x: event.clientX,
+            y: event.clientY,
+            left: ui.stage.scrollLeft,
+            top: ui.stage.scrollTop
+        };
+        ui.stage.setPointerCapture(event.pointerId);
+        ui.root.classList.add('rl-panning');
+    }
+
+    function onPointerMove(event) {
+        if (!drag || event.pointerId !== drag.id) {
+            return;
+        }
+        var dx = event.clientX - drag.x;
+        var dy = event.clientY - drag.y;
+        if (Math.abs(dx) + Math.abs(dy) > DRAG_SLOP) {
+            state.dragged = true;
+        }
+        ui.stage.scrollLeft = drag.left - dx;
+        ui.stage.scrollTop = drag.top - dy;
+        event.preventDefault();
+    }
+
+    function onPointerUp(event) {
+        if (!drag || event.pointerId !== drag.id) {
+            return;
+        }
+        if (ui.stage.hasPointerCapture(event.pointerId)) {
+            ui.stage.releasePointerCapture(event.pointerId);
+        }
+        drag = null;
+        ui.root.classList.remove('rl-panning');
     }
 
     /**
@@ -237,6 +364,7 @@
         if (!item) {
             return;
         }
+        resetZoom();
         state.index = index;
         state.loadToken += 1;
         var token = state.loadToken;
@@ -329,6 +457,7 @@
         ui.root.classList.remove('rl-open', 'rl-loading');
         ui.root.hidden = true;
         ui.img.removeAttribute('src');
+        resetZoom();
         unlockScroll();
         if (state.lastFocus && state.lastFocus.focus) {
             state.lastFocus.focus();
