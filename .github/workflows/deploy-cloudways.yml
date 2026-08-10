@@ -369,8 +369,12 @@ jobs:
             echo "PRODUCTION_URL is not set — skipping health check."
             exit 0
           fi
+          # -L follows redirects and reports the code of the FINAL response.
+          # Without it a PRODUCTION_URL of http://... reports the 301 to https
+          # and the check fails against a perfectly healthy site. Trailing
+          # slashes redirect too, so this also makes the URL format forgiving.
           for attempt in 1 2 3 4 5; do
-            code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 20 "${PRODUCTION_URL}/login" || echo 000)
+            code=$(curl -sL --max-redirs 5 -o /dev/null -w '%{http_code}' --max-time 20 "${PRODUCTION_URL%/}/login" || echo 000)
             echo "Attempt $attempt: HTTP $code"
             if [ "$code" = "200" ]; then
               echo "Site is up."
