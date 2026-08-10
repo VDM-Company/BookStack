@@ -17,9 +17,12 @@
     $refreshTheme = config('view.theme');
     $refreshCssPath = theme_path('public/css/theme.css');
     $refreshJsPath = theme_path('public/js/theme.js');
+    $refreshLightboxPath = theme_path('public/js/lightbox.js');
     // Cache-bust on mtime so a rebuilt theme is picked up without a hard refresh.
     $refreshCssVer = $refreshCssPath && file_exists($refreshCssPath) ? filemtime($refreshCssPath) : '';
     $refreshJsVer = $refreshJsPath && file_exists($refreshJsPath) ? filemtime($refreshJsPath) : '';
+    $refreshLightboxVer = $refreshLightboxPath && file_exists($refreshLightboxPath)
+        ? filemtime($refreshLightboxPath) : '';
 @endphp
 
 <link rel="preload" as="font" type="font/woff2" crossorigin
@@ -27,6 +30,8 @@
 <link rel="stylesheet"
       href="{{ url('/theme/' . $refreshTheme . '/css/theme.css') }}?v={{ $refreshCssVer }}">
 <script defer src="{{ url('/theme/' . $refreshTheme . '/js/theme.js') }}?v={{ $refreshJsVer }}"
+        @if($cspNonce ?? false) nonce="{{ $cspNonce }}" @endif></script>
+<script defer src="{{ url('/theme/' . $refreshTheme . '/js/lightbox.js') }}?v={{ $refreshLightboxVer }}"
         @if($cspNonce ?? false) nonce="{{ $cspNonce }}" @endif></script>
 
 @if(!request()->routeIs('settings.category'))
