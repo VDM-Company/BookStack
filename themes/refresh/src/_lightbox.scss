@@ -1,0 +1,243 @@
+@use "tools" as *;
+
+/**
+ * Image lightbox.
+ *
+ * Everything the module creates is prefixed `rl-`, so this section overrides
+ * no core selector and is exempt from the lightDark() wrinkle documented in
+ * _tools.scss. The overlay is deliberately dark in both colour schemes.
+ */
+
+.rl-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  flex-direction: column;
+  background-color: rgba(10, 13, 18, 0.86);
+  opacity: 0;
+  transition: opacity var(--dur-fast) var(--ease-out);
+}
+
+.rl-backdrop.rl-open {
+  opacity: 1;
+}
+
+.rl-backdrop[hidden] {
+  display: none;
+}
+
+.rl-stage {
+  position: relative;
+  flex: 1 1 auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  min-height: 0;
+  padding: 3.5rem 1rem 1rem;
+}
+
+.rl-img {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-lg);
+  transform: scale(0.98);
+  transition: transform var(--dur-fast) var(--ease-out);
+}
+
+.rl-open .rl-img {
+  transform: scale(1);
+}
+
+/**
+ * Zoomed state.
+ *
+ * Panning is native scrolling on the stage rather than a transform, which
+ * gets touch panning and keyboard scrolling for free and keeps the maths to
+ * one scrollLeft assignment.
+ */
+.rl-zoomable .rl-img {
+  cursor: zoom-in;
+}
+
+.rl-zoomed .rl-stage {
+  overflow: auto;
+  align-items: flex-start;
+  justify-content: flex-start;
+}
+
+.rl-zoomed .rl-img {
+  max-width: none;
+  max-height: none;
+  margin: auto;
+  cursor: grab;
+  transform: none;
+}
+
+.rl-panning .rl-img {
+  cursor: grabbing;
+}
+
+/* Controls. Kept off the image itself so they never sit on top of content. */
+.rl-btn {
+  position: absolute;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.75rem;
+  height: 2.75rem;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-full);
+  background-color: rgba(255, 255, 255, 0.1);
+  color: #fff;
+  font-size: 1.6rem;
+  line-height: 1;
+  cursor: pointer;
+  transition: background-color var(--dur-fast) var(--ease-out);
+}
+
+.rl-btn:hover {
+  background-color: rgba(255, 255, 255, 0.2);
+}
+
+.rl-btn:focus-visible {
+  outline: var(--focus-ring-width) solid #fff;
+  outline-offset: var(--focus-ring-offset);
+}
+
+.rl-btn[hidden] {
+  display: none;
+}
+
+.rl-close {
+  top: 0.75rem;
+  right: 0.75rem;
+}
+
+.rl-prev {
+  top: 50%;
+  left: 0.75rem;
+  transform: translateY(-50%);
+}
+
+.rl-next {
+  top: 50%;
+  right: 0.75rem;
+  transform: translateY(-50%);
+}
+
+.rl-bar {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: baseline;
+  justify-content: center;
+  gap: 0.75rem;
+  padding: 0.75rem 1rem 1.25rem;
+  color: rgba(255, 255, 255, 0.85);
+  font-size: 0.875rem;
+  text-align: center;
+}
+
+.rl-bar[hidden] {
+  display: none;
+}
+
+.rl-caption[hidden],
+.rl-counter[hidden] {
+  display: none;
+}
+
+.rl-counter {
+  color: rgba(255, 255, 255, 0.6);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* Only shown once a load has been slow enough to be worth reporting. */
+.rl-spinner {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 2rem;
+  height: 2rem;
+  margin: -1rem 0 0 -1rem;
+  border: 2px solid rgba(255, 255, 255, 0.25);
+  border-top-color: #fff;
+  border-radius: var(--radius-full);
+  opacity: 0;
+  pointer-events: none;
+  animation: rl-spin 0.7s linear infinite;
+}
+
+.rl-loading .rl-spinner {
+  opacity: 1;
+}
+
+@keyframes rl-spin {
+  to { transform: rotate(360deg); }
+}
+
+@include smaller-than($bp-s) {
+  .rl-btn {
+    width: 2.25rem;
+    height: 2.25rem;
+    font-size: 1.35rem;
+  }
+
+  .rl-stage {
+    padding: 3rem 0.5rem 0.5rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rl-backdrop,
+  .rl-img,
+  .rl-btn {
+    transition: none;
+  }
+
+  .rl-img {
+    transform: none;
+  }
+
+  .rl-spinner {
+    animation: none;
+  }
+}
+
+/**
+ * Hover affordance on eligible images.
+ *
+ * The click handler decides eligibility from the link's href; CSS can only
+ * approximate that. Matching /uploads/images/ covers every image BookStack
+ * itself inserts. An author who hand-links an image to an external image URL
+ * gets the plain pointer cursor but still gets the lightbox on click — a
+ * cosmetic mismatch, not a functional one.
+ */
+.page-content img,
+.comment-box .content img {
+  cursor: zoom-in;
+}
+
+.page-content a:not([href*="/uploads/images/"]) img,
+.comment-box .content a:not([href*="/uploads/images/"]) img {
+  cursor: pointer;
+}
+
+/* Never in an editor — an image being edited is being selected, not opened.
+   The markdown preview iframe is excluded too: core clones this stylesheet
+   into it and gives its body the page-content class
+   (resources/js/markdown/display.ts:35), but clicks there are handled by
+   core, not by us. The class sits on that iframe's <html> (display.ts:66). */
+.editor-content-area img,
+.editor-content-area a img,
+[contenteditable] img,
+[contenteditable] a img,
+.markdown-editor-display img,
+.markdown-editor-display a img {
+  cursor: default;
+}
