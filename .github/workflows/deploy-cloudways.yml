@@ -224,11 +224,19 @@ jobs:
       # ------------------------------------------------------------- verify
 
       - name: Health check
-        if: ${{ !inputs.dry_run && secrets.PRODUCTION_URL != '' }}
+        if: ${{ !inputs.dry_run }}
+        env:
+          # The `secrets` context is not available in `if:` conditions, so the
+          # "is it configured?" test has to happen in the shell instead.
+          PRODUCTION_URL: ${{ secrets.PRODUCTION_URL }}
         run: |
           set -euo pipefail
+          if [ -z "${PRODUCTION_URL:-}" ]; then
+            echo "PRODUCTION_URL is not set — skipping health check."
+            exit 0
+          fi
           for attempt in 1 2 3 4 5; do
-            code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 20 "${{ secrets.PRODUCTION_URL }}/login" || echo 000)
+            code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 20 "${PRODUCTION_URL}/login" || echo 000)
             echo "Attempt $attempt: HTTP $code"
             if [ "$code" = "200" ]; then
               echo "Site is up."
