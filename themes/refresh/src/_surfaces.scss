@@ -1,0 +1,420 @@
+@use "tools" as *;
+
+/**
+ * Cards, lists, tables, menus and the rest of the component surfaces.
+ */
+
+/* Core: .card { background #FFF (dark #222); box-shadow flat; radius 3px }.
+   A hairline is added because in dark mode a shadow alone cannot separate one
+   dark surface from another. */
+.card {
+  @include ld(("background-color", var(--bg-surface)), ("border", 1px solid var(--border-subtle)));
+  box-shadow: var(--shadow-sm);
+  border-radius: var(--radius-lg);
+}
+
+.card-title {
+  @include ld(("color", var(--text-strong)), ("fill", var(--text-strong)));
+  font-size: 0.95rem;
+  font-weight: 600;
+  letter-spacing: -0.006em;
+}
+
+.card-footer-link,
+button.card-footer-link {
+  @include ld1(border-top-color, var(--border-subtle));
+  border-radius: 0 0 var(--radius-lg) var(--radius-lg);
+  font-weight: 500;
+  transition: background-color var(--dur-fast) var(--ease-out);
+  &:hover {
+    @include ld1(background-color, var(--bg-hover));
+  }
+}
+
+.card.border-card {
+  @include ld1(border-color, var(--border));
+}
+
+.content-wrap.card {
+  border-radius: var(--radius-lg);
+  min-height: 60dvh;
+}
+
+.sub-card {
+  @include ld1(border, 1px solid var(--border));
+  box-shadow: var(--shadow-xs);
+  border-radius: var(--radius-md);
+}
+
+/**
+ * Grid cards.
+ */
+.grid-card {
+  @include ld(("background-color", var(--bg-surface)), ("border-color", var(--border-subtle)),
+              ("color", var(--text)));
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-xs);
+  transition: border-color var(--dur) var(--ease-out),
+              box-shadow var(--dur) var(--ease-out),
+              transform var(--dur) var(--ease-out);
+
+  &:hover {
+    @include ld(("color", var(--text)), ("border-color", var(--border-strong)));
+    box-shadow: var(--shadow-lg);
+    transform: translate3d(0, -3px, 0);
+  }
+  &:active {
+    transform: translate3d(0, -1px, 0);
+    box-shadow: var(--shadow-md);
+  }
+
+  h2 {
+    font-size: 1.35em;
+    line-height: 1.25;
+    letter-spacing: -0.016em;
+  }
+  p {
+    font-size: .75rem;
+    @include ld1(color, var(--text-muted));
+  }
+}
+
+/**
+ * Entity covers.
+ *
+ * A cover with no uploaded image is a flat block of the entity colour. A soft
+ * off-centre highlight plus a fine diagonal hatch gives it some surface, so an
+ * un-illustrated shelf does not read as a grid of solid rectangles. Both layers
+ * sit over any real artwork at low enough opacity to leave it alone.
+ */
+.featured-image-container-wrap {
+  position: relative;
+  overflow: hidden;
+  isolation: isolate;
+
+  &:after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    background-image:
+      radial-gradient(120% 100% at 18% 0%, rgba(255, 255, 255, 0.22), rgba(255, 255, 255, 0) 60%),
+      repeating-linear-gradient(135deg, rgba(255, 255, 255, 0.05) 0 1px, rgba(255, 255, 255, 0) 1px 7px),
+      linear-gradient(180deg, rgba(0, 0, 0, 0) 55%, rgba(0, 0, 0, 0.18) 100%);
+  }
+
+  .svg-icon {
+    z-index: 1;
+    filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.35));
+  }
+}
+/* Dark-mode entity colours are already light so they can carry text; the same
+   white highlight on top makes the block glow. Darken instead. */
+html.dark-mode .featured-image-container-wrap:after {
+  background-image:
+    radial-gradient(120% 100% at 18% 0%, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0) 60%),
+    repeating-linear-gradient(135deg, rgba(0, 0, 0, 0.05) 0 1px, rgba(0, 0, 0, 0) 1px 7px),
+    linear-gradient(180deg, rgba(0, 0, 0, 0.10) 0%, rgba(0, 0, 0, 0.34) 100%);
+}
+
+.featured-image-container {
+  transition: transform var(--dur-slow) var(--ease-out),
+              filter var(--dur-slow) var(--ease-out);
+}
+/* Core drops the cover to 50% opacity on hover, which reads as loading. */
+.grid-card:hover .featured-image-container {
+  opacity: 1;
+  transform: scale(1.04);
+  filter: saturate(1.06);
+}
+
+/**
+ * Lists.
+ */
+.entity-list-item,
+.icon-list-item {
+  transition: background-color var(--dur-fast) var(--ease-out);
+
+  &:not(.no-hover):hover {
+    @include ld1(background-color, var(--bg-hover));
+    border-radius: var(--radius-md);
+  }
+  &:focus:not(:focus-visible) {
+    outline: none;
+    background-color: transparent;
+  }
+  &:focus-visible {
+    @include ld1(background-color, var(--bg-hover));
+    border-radius: var(--radius-md);
+    outline: var(--focus-ring-width) solid var(--focus-ring);
+    outline-offset: calc(var(--focus-ring-offset) * -1);
+  }
+}
+
+.card .entity-list-item:not(.no-hover, .book-contents .entity-list-item):hover {
+  @include ld1(background-color, var(--bg-hover));
+}
+
+.split-icon-list-item:hover {
+  @include ld1(background-color, var(--bg-hover));
+}
+
+.entity-list-item-image {
+  border-radius: var(--radius-md);
+}
+
+.book-tree .sidebar-page-list .entity-list-item.selected,
+.book-tree .sidebar-page-list .chapter-contents-toggle:hover {
+  @include ld1(background-color, var(--bg-hover));
+}
+
+.sortable-page-list li {
+  @include ld(("background-color", var(--bg-surface)), ("border-color", var(--border)));
+}
+
+/**
+ * Pagination.
+ */
+ul.pagination {
+  a, span {
+    @include ld(("border-color", var(--border)), ("background-color", var(--bg-surface)),
+                ("color", var(--text)));
+    transition: background-color var(--dur-fast) var(--ease-out),
+                color var(--dur-fast) var(--ease-out);
+  }
+  li:first-child a, li:first-child span {
+    border-radius: var(--radius-sm) 0 0 var(--radius-sm);
+  }
+  li:last-child a, li:last-child span {
+    border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+  }
+  a:hover {
+    @include ld(("background-color", var(--bg-hover)), ("color", var(--text-strong)));
+  }
+  /* Explicit white: this sits on the accent fill, not on a neutral surface. */
+  li.active span {
+    @include ld(("background-color", var(--color-primary)), ("border-color", var(--color-primary)));
+    color: #FFF;
+    font-weight: 600;
+    position: relative;
+    z-index: 1;
+  }
+}
+
+/**
+ * Dropdown menus.
+ */
+.dropdown-menu {
+  @include ld(("background-color", var(--bg-surface)), ("color", var(--text)),
+              ("border", 1px solid var(--border-subtle)));
+  box-shadow: var(--shadow-lg);
+  border-radius: var(--radius-md);
+
+  .icon-item, .text-item, .label-item {
+    @include ld1(color, var(--text));
+    transition: background-color var(--dur-fast) var(--ease-out),
+                color var(--dur-fast) var(--ease-out);
+  }
+  .icon-item:hover, .text-item:hover, .label-item:hover,
+  .icon-item:focus, .text-item:focus, .label-item:focus {
+    background-color: var(--color-primary-light);
+    /* Not the primary: on the tinted fill the dark primary is ~1.7:1. */
+    color: var(--color-link);
+  }
+  .text-muted {
+    @include ld(("color", var(--text-muted)), ("fill", var(--text-muted)));
+  }
+  li.border-bottom {
+    @include ld1(border-bottom-color, var(--border-subtle));
+  }
+}
+
+/**
+ * Tables.
+ */
+table td, table th {
+  @include ld1(border-color, var(--border));
+}
+table:not(:has(thead)) th, table thead {
+  @include ld(("background-color", var(--bg-surface-alt)), ("color", var(--text-strong)));
+  font-weight: 600;
+}
+table.table {
+  tr td, tr th {
+    @include ld1(border-bottom-color, var(--border-subtle));
+  }
+  th {
+    @include ld1(color, var(--text-strong));
+    font-weight: 600;
+  }
+  tbody tr {
+    transition: background-color var(--dur-fast) var(--ease-out);
+  }
+  tbody tr:hover {
+    @include ld1(background-color, var(--bg-hover));
+  }
+}
+
+.item-list {
+  box-shadow: var(--shadow-xs);
+  border-radius: var(--radius-md);
+}
+.item-list-row {
+  @include ld(("border-color", var(--border)), ("background-color", var(--bg-surface)));
+  border-width: 1px;
+  transition: background-color var(--dur-fast) var(--ease-out);
+  &:hover {
+    @include ld1(background-color, var(--bg-hover));
+  }
+}
+.item-list-row:first-child {
+  border-radius: var(--radius-md) var(--radius-md) 0 0;
+}
+.item-list-row:last-child {
+  border-radius: 0 0 var(--radius-md) var(--radius-md);
+  border-bottom-width: 1px;
+}
+
+/**
+ * Tags.
+ */
+.tag-item {
+  @include ld(("border-color", var(--border)), ("background-color", var(--bg-surface)));
+  border-radius: var(--radius-sm);
+  font-size: 0.8em;
+
+  a, span, a:hover, a:active {
+    @include ld1(color, var(--text-muted));
+    transition: background-color var(--dur-fast) var(--ease-out),
+                color var(--dur-fast) var(--ease-out);
+  }
+  a:hover {
+    @include ld(("background-color", var(--bg-hover)), ("color", var(--text-strong)));
+  }
+  svg {
+    @include ld1(fill, var(--text-subtle));
+  }
+  .tag-value {
+    @include ld(("border-color", var(--border-subtle)), ("background-color", var(--bg-surface-alt)));
+  }
+}
+
+/**
+ * Overlays, popups and notifications.
+ */
+[overlay], .popup-background {
+  @include ld1(background-color, rgba(17, 21, 27, 0.45));
+  backdrop-filter: blur(2px);
+}
+html.dark-mode [overlay],
+html.dark-mode .popup-background {
+  background-color: rgba(0, 0, 0, 0.66);
+}
+
+.popup-body {
+  @include ld(("background-color", var(--bg-surface)), ("border", 1px solid var(--border-subtle)));
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-xl);
+}
+
+.notification {
+  @include ld(("background-color", var(--bg-surface)), ("color", var(--text-strong)),
+              ("border", 1px solid var(--border-subtle)));
+  border-inline-start: 4px solid currentColor;
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-xl);
+  font-weight: 600;
+  transition: transform var(--dur-slow) var(--ease-out);
+
+  span {
+    @include ld1(color, var(--text));
+  }
+  .dismiss svg {
+    @include ld1(color, var(--text));
+  }
+}
+
+/**
+ * Tabs. Core forces `outline: 0 !important` on the selected tab, so a keyboard
+ * user tabbing into a tablist lands on it with no visible focus at all. That
+ * !important can only be answered with another one.
+ */
+.tab-container [role="tablist"] {
+  @include ld1(border-bottom-color, var(--border-subtle));
+}
+.tab-container [role="tablist"] button[role="tab"] {
+  &[aria-selected="true"] {
+    font-weight: 600;
+  }
+  &:focus:not(:focus-visible) {
+    outline: none;
+  }
+  &:focus-visible {
+    outline: var(--focus-ring-width) solid var(--focus-ring) !important;
+    outline-offset: calc(var(--focus-ring-offset) * -1);
+  }
+}
+
+/**
+ * Content callouts. Core's base (un-typed) callout has no dark variant, so it
+ * renders as a near-white block against light body text in dark mode.
+ */
+html.dark-mode .page-content .callout:not(.success):not(.danger):not(.info):not(.warning) {
+  background-color: var(--bg-inset);
+  border-color: var(--border-strong);
+  color: var(--text);
+}
+.page-content .callout {
+  border-radius: 0 var(--radius-md) var(--radius-md) 0;
+}
+
+/* Revision diffs hardcode pale light-mode tints with no dark variant. */
+html.dark-mode .page-content ins {
+  background: #16351a;
+  color: #b9e7bd;
+}
+html.dark-mode .page-content del {
+  background: #3a1616;
+  color: #f0bcbc;
+}
+
+.page-content details {
+  @include ld1(border-color, var(--border-subtle));
+  border-radius: var(--radius-md);
+}
+.page-content details > summary {
+  @include ld1(background-color, var(--bg-inset));
+}
+
+/* Comment meta. Core uses #999 on white (2.85:1) and then knocks it back
+   further with opacity. */
+.comment-box .header .text-muted {
+  @include ld1(color, var(--text-muted));
+}
+.comment-box .right-meta .text-muted {
+  opacity: 1;
+}
+
+.entity-selector {
+  @include ld1(border-color, var(--border));
+  border-radius: var(--radius-md);
+
+  .entity-list {
+    @include ld1(background-color, var(--bg-surface-alt));
+  }
+  .entity-list-item {
+    @include ld1(background-color, var(--bg-surface));
+  }
+}
+
+.back-to-top {
+  border-radius: var(--radius-full);
+  box-shadow: var(--shadow-lg);
+}
+
+.api-method {
+  border-radius: var(--radius-xs);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.02em;
+  opacity: 1;
+}

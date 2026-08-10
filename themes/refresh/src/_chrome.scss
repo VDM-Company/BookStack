@@ -1,0 +1,192 @@
+@use "tools" as *;
+
+/**
+ * Header, navigation and page chrome.
+ */
+
+/* Core: border-bottom 1px #DDD (dark #000) + a flat card shadow. A tinted
+   shadow and a darkened hairline give the bar depth without a hard seam. */
+header {
+  box-shadow: var(--shadow-md);
+  @include ld1(border-bottom-color, rgba(0, 0, 0, 0.16));
+}
+
+header .links a {
+  border-radius: var(--radius-sm);
+  font-weight: 500;
+  position: relative;
+  transition: background-color var(--dur-fast) var(--ease-out);
+}
+
+/**
+ * Current-section indication.
+ *
+ * Stock BookStack gives no indication of which top-level area you are in. Core
+ * emits no hook for it, so the theme's JS marks the matching nav link with
+ * `data-refresh-current` and this draws the indicator. The underline sits on a
+ * pseudo-element so it can align with the bottom of the bar rather than the
+ * link box.
+ */
+header .links a[data-refresh-current] {
+  background-color: rgba(255, 255, 255, 0.08);
+}
+header .links a[data-refresh-current]:after {
+  content: '';
+  position: absolute;
+  left: 12px;
+  right: 12px;
+  bottom: -12px;
+  height: 2px;
+  border-radius: 2px 2px 0 0;
+  background-color: currentColor;
+}
+
+header .search-box input {
+  background-color: rgba(0, 0, 0, 0.18);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.12);
+  border-radius: var(--radius-full);
+  color: #FFF;
+  transition: background-color var(--dur) var(--ease-out),
+              border-color var(--dur) var(--ease-out);
+
+  &:hover {
+    background-color: rgba(0, 0, 0, 0.24);
+  }
+  &:focus {
+    background-color: rgba(0, 0, 0, 0.28);
+    border-color: rgba(255, 255, 255, 0.45);
+  }
+}
+
+header .search-box.search-active:focus-within {
+  input {
+    @include ld(("background-color", var(--bg-surface)), ("border-color", var(--border)));
+    box-shadow: none;
+  }
+  #header-search-box-button, input {
+    @include ld1(color, var(--text));
+  }
+}
+
+.global-search-suggestions {
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-lg);
+}
+
+.logo-text {
+  font-size: 1.7em;
+  font-weight: 600;
+  letter-spacing: -0.022em;
+}
+
+/* Mobile: the header links collapse into a light dropdown panel. */
+@include smaller-than($bp-l) {
+  header .header-links {
+    @include ld(("background-color", var(--bg-surface)), ("border", 1px solid var(--border-subtle)));
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-lg);
+  }
+  header .links a,
+  header .dropdown-container ul li a,
+  header .dropdown-container ul li button {
+    @include ld1(color, var(--text));
+    border-radius: 0;
+  }
+  header .links a:hover,
+  header .dropdown-container ul li a:hover,
+  header .dropdown-container ul li button:hover {
+    background-color: var(--color-primary-light);
+    /* The link colour rather than the primary: on the tinted hover fill the
+       dark-mode primary drops to about 1.7:1. */
+    color: var(--color-link);
+  }
+  /* The desktop underline would float mid-menu once links stack, so it becomes
+     a leading accent bar instead. */
+  header .links a[data-refresh-current] {
+    background-color: var(--color-primary-light);
+    color: var(--color-link);
+  }
+  header .links a[data-refresh-current]:after {
+    inset: 0 auto 0 0;
+    width: 3px;
+    height: auto;
+    border-radius: 0;
+  }
+}
+
+.tri-layout-mobile-tabs {
+  @include ld(("background-color", var(--bg-surface)), ("border-bottom-color", var(--border-subtle)));
+  box-shadow: var(--shadow-sm);
+}
+.tri-layout-mobile-tab {
+  @include ld(("background-color", var(--bg-surface)), ("border-bottom-color", var(--border)));
+  border-bottom-width: 2px;
+  font-weight: 500;
+  transition: background-color var(--dur-fast) var(--ease-out),
+              border-color var(--dur-fast) var(--ease-out);
+  &:hover {
+    @include ld1(background-color, var(--bg-hover));
+  }
+  &:first-child {
+    @include ld1(border-inline-end-color, var(--border-subtle));
+  }
+}
+
+/* Core recesses the toolbar with 50% opacity over an already-muted colour,
+   landing under 2:1. Colour tiers give the same recessive feel and stay
+   readable. */
+.faded a,
+.faded button,
+.faded span,
+.faded span > div {
+  @include ld1(color, var(--text-muted));
+  @include ld1(fill, var(--text-muted));
+}
+.faded .text-button {
+  opacity: 1;
+  @include ld1(color, var(--text-muted));
+  transition: color var(--dur-fast) var(--ease-out);
+  &:hover {
+    @include ld1(color, var(--text-strong));
+  }
+}
+
+.breadcrumbs {
+  opacity: 0.85;
+}
+
+.sticky-sidebar .sticky-sidebar-header {
+  background: var(--bg-page);
+  background: linear-gradient(180deg, var(--bg-page) 66%, transparent 100%);
+}
+html.dark-mode .sticky-sidebar-header {
+  background: var(--bg-page);
+  background: linear-gradient(180deg, var(--bg-page) 66%, transparent 100%);
+}
+
+.sidebar-page-nav .sidebar-page-nav-bullet {
+  @include ld1(box-shadow, 0 0 0 6px var(--bg-page));
+}
+
+.active-link-list a:hover {
+  @include ld1(background-color, var(--bg-hover));
+  border-radius: var(--radius-sm);
+}
+.active-link-list.in-sidebar a.active {
+  @include ld1(background-color, var(--bg-hover));
+  border-radius: var(--radius-sm);
+}
+
+.skip-to-content-link {
+  @include ld(("background-color", var(--bg-surface)), ("color", var(--color-link)));
+  padding: 12px 16px;
+  border-radius: 0 var(--radius-md) var(--radius-md) 0;
+  box-shadow: var(--shadow-lg);
+  font-weight: 600;
+  transition: top var(--dur) var(--ease-out);
+  &:focus {
+    outline: var(--focus-ring-width) solid var(--color-link);
+    outline-offset: calc(var(--focus-ring-offset) * -1);
+  }
+}

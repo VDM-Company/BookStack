@@ -1,0 +1,139 @@
+/**
+ * Design tokens.
+ *
+ * Pure additions — core defines none of these, so nothing is being fought over
+ * here. Everything downstream in the theme refers to these rather than to raw
+ * values, which is what keeps the surfaces, borders and shadows consistent.
+ *
+ * The ramp is cool/slate-tinted throughout (hue ~222). Stock BookStack mixes
+ * warm greys (#f8f8f8, #444) with cool ones (#2B2B2B, #313335), which is what
+ * makes its surfaces read as slightly dirty side by side.
+ *
+ * Accent colours are NOT redefined. `--color-primary` and the entity colours
+ * are administrator-configurable and injected per request by core's
+ * custom-styles view; overriding them here would silently break the colour
+ * pickers in Settings. The theme ships a harmonised palette as an opt-in
+ * command instead (see functions.php).
+ */
+
+:root {
+  /* Neutral ramp — light */
+  --n-0:   #ffffff;
+  --n-25:  #fbfcfd;
+  --n-50:  #f6f8fa;
+  --n-100: #eef1f5;
+  --n-150: #e5e9ef;
+  --n-200: #d9dee7;
+  --n-300: #c3cad6;
+  --n-400: #818da2;
+  --n-500: #677282;
+  --n-600: #525c6b;
+  --n-700: #3d4553;
+  --n-800: #2a303b;
+  --n-900: #1a1f27;
+  --n-950: #11151b;
+
+  /* Surfaces */
+  --bg-page:        var(--n-50);
+  --bg-surface:     var(--n-0);
+  --bg-surface-alt: var(--n-50);
+  --bg-inset:       var(--n-100);
+  --bg-hover:       rgba(26, 31, 39, 0.05);
+  --bg-active:      rgba(26, 31, 39, 0.09);
+
+  /* Borders. --border-input is separate because a form control boundary needs
+     3:1 against its own fill under WCAG 1.4.11, which --border-strong misses. */
+  --border-subtle: var(--n-150);
+  --border:        var(--n-200);
+  --border-strong: var(--n-300);
+  --border-input:  var(--n-400);
+
+  /* Text */
+  --text-strong: var(--n-900);
+  --text:        var(--n-700);
+  --text-muted:  var(--n-500);
+  --text-subtle: var(--n-400);
+
+  /* Elevation — tinted with the neutral hue rather than pure black, and lit
+     consistently from above so shadows agree with one another. */
+  --shadow-xs: 0 1px 2px rgba(20, 26, 38, 0.06);
+  --shadow-sm: 0 1px 3px rgba(20, 26, 38, 0.07),
+               0 1px 2px rgba(20, 26, 38, 0.04);
+  --shadow-md: 0 4px 12px -2px rgba(20, 26, 38, 0.10),
+               0 2px 4px -2px rgba(20, 26, 38, 0.06);
+  --shadow-lg: 0 12px 28px -8px rgba(20, 26, 38, 0.16),
+               0 4px 8px -4px rgba(20, 26, 38, 0.07);
+  --shadow-xl: 0 24px 56px -16px rgba(20, 26, 38, 0.22),
+               0 8px 16px -8px rgba(20, 26, 38, 0.10);
+
+  /* Radii — inner elements tighter, containers softer */
+  --radius-xs:   3px;
+  --radius-sm:   5px;
+  --radius-md:   8px;
+  --radius-lg:   12px;
+  --radius-full: 999px;
+
+  /* Motion */
+  --dur-fast: 120ms;
+  --dur:      200ms;
+  --dur-slow: 320ms;
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+
+  /* Focus ring. Kept separate from --color-primary, which is dark enough in
+     dark mode to fall below the 3:1 non-text minimum on dark surfaces. */
+  --focus-ring: var(--color-primary);
+  --focus-ring-width: 2px;
+  --focus-ring-offset: 2px;
+
+  /* Destructive fill. --color-negative is tuned as text on a page background;
+     used as a button fill it has to carry white text instead. */
+  --destructive: #ab0f0e;
+
+  /* Typeface */
+  --font-refresh-body: "Geist", -apple-system, BlinkMacSystemFont, "Segoe UI",
+    "Oxygen", "Ubuntu", "Roboto", "Cantarell", "Fira Sans", "Droid Sans",
+    "Helvetica Neue", sans-serif;
+  --font-refresh-mono: "Geist Mono", ui-monospace, SFMono-Regular, "SF Mono",
+    Menlo, "Lucida Console", "DejaVu Sans Mono", "Ubuntu Mono", Monaco, monospace;
+}
+
+:root.dark-mode {
+  /* Off-black tinted with the same hue as the light ramp, never pure #000, so
+     elevated surfaces have somewhere to go. */
+  --n-0:   #0f1216;
+  --n-25:  #14171c;
+  --n-50:  #181c22;
+  --n-100: #1e232b;
+  --n-150: #252b34;
+  --n-200: #2d3440;
+  --n-300: #3a4250;
+  --n-400: #6c788b;
+  --n-500: #838d9d;
+  --n-600: #9aa3b2;
+  --n-700: #b4bcc8;
+  --n-800: #ccd2dc;
+  --n-900: #e4e8ee;
+  --n-950: #f2f4f7;
+
+  --bg-page:        var(--n-25);
+  --bg-surface:     var(--n-100);
+  --bg-surface-alt: var(--n-50);
+  --bg-inset:       var(--n-150);
+  --bg-hover:       rgba(255, 255, 255, 0.06);
+  --bg-active:      rgba(255, 255, 255, 0.10);
+
+  --shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.40);
+  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.46),
+               0 1px 2px rgba(0, 0, 0, 0.30);
+  --shadow-md: 0 4px 12px -2px rgba(0, 0, 0, 0.55),
+               0 2px 4px -2px rgba(0, 0, 0, 0.35);
+  --shadow-lg: 0 12px 28px -8px rgba(0, 0, 0, 0.62),
+               0 4px 8px -4px rgba(0, 0, 0, 0.40);
+  --shadow-xl: 0 24px 56px -16px rgba(0, 0, 0, 0.70),
+               0 8px 16px -8px rgba(0, 0, 0, 0.45);
+
+  /* The dark primary is too dark to serve as a focus ring; the link colour is
+     the same hue and clears 3:1 on every dark surface. */
+  --focus-ring: var(--color-link);
+  --destructive: #b3352f;
+}

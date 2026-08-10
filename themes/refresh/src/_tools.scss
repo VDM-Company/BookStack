@@ -1,0 +1,55 @@
+/**
+ * Overriding tools.
+ *
+ * This stylesheet is loaded AFTER BookStack's own dist/styles.css, so an
+ * override at EQUAL specificity wins. That gives us one rule to live by:
+ * mirror core's selector exactly, and do not reach for !important unless core
+ * used it first.
+ *
+ * The one wrinkle is core's `lightDark()` mixin. For a single declaration it
+ * emits TWO rules:
+ *
+ *     .card            { background-color: #FFF; }
+ *     html.dark-mode .card { background-color: #222; }
+ *
+ * The second has higher specificity than anything we write at the plain
+ * selector, so overriding only `.card` would leave dark mode showing core's
+ * value. `ld()` emits both halves so our value wins in both schemes. Because
+ * the value we pass is normally a custom property that already resolves per
+ * scheme, the two halves are usually identical — that is expected.
+ */
+
+@use "sass:list";
+
+@mixin ld($declarations...) {
+  @each $pair in $declarations {
+    #{list.nth($pair, 1)}: list.nth($pair, 2);
+  }
+  html.dark-mode & {
+    @each $pair in $declarations {
+      #{list.nth($pair, 1)}: list.nth($pair, 2);
+    }
+  }
+}
+
+/* Single-property convenience wrapper for the common case. */
+@mixin ld1($prop, $value) {
+  #{$prop}: $value;
+  html.dark-mode & {
+    #{$prop}: $value;
+  }
+}
+
+/* Core breakpoints, mirrored so media queries line up with core's. */
+$bp-xxl: 1400px;
+$bp-xl: 1100px;
+$bp-l: 1000px;
+$bp-m: 880px;
+$bp-s: 600px;
+
+@mixin smaller-than($size) {
+  @media screen and (max-width: $size) { @content; }
+}
+@mixin larger-than($size) {
+  @media screen and (min-width: ($size + 1)) { @content; }
+}

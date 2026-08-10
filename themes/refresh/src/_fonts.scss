@@ -1,0 +1,43 @@
+/**
+ * Self-hosted variable webfonts.
+ *
+ * Served from the theme's own public directory, so the theme is portable and
+ * fetches nothing from a third party. Paths are relative to this stylesheet's
+ * served location (/theme/<name>/css/theme.css), resolving to
+ * /theme/<name>/fonts/.
+ *
+ * Geist & Geist Mono — SIL Open Font License 1.1. Licence text ships alongside
+ * the files in ../fonts/LICENSE.txt.
+ *
+ * Note: these deliberately do NOT reach BookStack's PDF/offline exports. Export
+ * output is styled by core's export-styles.css, which this theme does not load,
+ * so exports keep their DejaVu-first system stack — which is what DOMPDF needs.
+ */
+
+@font-face {
+  font-family: "Geist";
+  src: url("../fonts/Geist-Variable.woff2") format("woff2-variations"),
+       url("../fonts/Geist-Variable.woff2") format("woff2");
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Geist Mono";
+  src: url("../fonts/GeistMono-Variable.woff2") format("woff2-variations"),
+       url("../fonts/GeistMono-Variable.woff2") format("woff2");
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+
+/**
+ * Core sets --font-body / --font-code on :root in its own stylesheet. Ours
+ * lands later at the same specificity, so simply redeclaring them repoints
+ * every consumer — including the editor and code blocks — in one place.
+ */
+:root {
+  --font-body: var(--font-refresh-body);
+  --font-code: var(--font-refresh-mono);
+}

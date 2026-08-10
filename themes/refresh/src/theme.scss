@@ -1,0 +1,21 @@
+/**
+ * "refresh" — a visual theme for BookStack.
+ *
+ * Loaded from <head> AFTER core's dist/styles.css, so overrides at equal
+ * specificity win. See _tools.scss for the one mechanical wrinkle (core's
+ * lightDark() mixin emits a higher-specificity dark-mode rule that has to be
+ * answered explicitly).
+ *
+ * Build:  themes/refresh/build.sh
+ * Source: themes/refresh/src/  ->  themes/refresh/public/css/theme.css
+ *
+ * Core is never modified. The only view this theme overrides is
+ * layouts/parts/custom-head.blade.php, purely to link this file.
+ */
+
+@use "tokens";
+@use "fonts";
+@use "base";
+@use "controls";
+@use "chrome";
+@use "surfaces";

@@ -1,0 +1,237 @@
+@use "tools" as *;
+
+/**
+ * Page shell, focus and typography.
+ */
+
+/* Core: html { background-color: #F2F2F2 } + html.dark-mode { #111 } */
+html {
+  background-color: var(--bg-page);
+}
+html.dark-mode {
+  background-color: var(--bg-page);
+}
+
+/* Core: body { color: #444 } + html.dark-mode body { color: #AAA } */
+body {
+  color: var(--text);
+  background-color: var(--bg-page);
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+  font-synthesis-weight: none;
+}
+html.dark-mode body {
+  color: var(--text);
+  background-color: var(--bg-page);
+}
+
+/**
+ * Focus.
+ *
+ * Core sets `*:focus { outline-style: dotted }`, which fires on mouse clicks
+ * too. We cannot delete that rule, so we neutralise it for pointer focus and
+ * re-express it on :focus-visible, where it belongs. `:focus:not(:focus-visible)`
+ * is more specific than core's `*:focus`, so this wins without !important.
+ */
+*:focus:not(:focus-visible) {
+  outline: none;
+}
+
+:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring);
+  outline-offset: var(--focus-ring-offset);
+}
+
+/* Core forces a white outline colour across header chrome. Below the mobile
+   breakpoint those links sit on a light dropdown panel, where white is
+   invisible. */
+@include smaller-than($bp-l) {
+  header .header-links,
+  header .header-links * {
+    outline-color: var(--focus-ring);
+  }
+}
+
+::selection {
+  background-color: var(--color-primary-light);
+}
+
+* {
+  scrollbar-color: var(--border-strong) transparent;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/**
+ * Headings.
+ *
+ * Core ships these at weight 400 with generous leading and no tracking, which
+ * is what makes stock BookStack read as untuned. Weight, tighter leading and
+ * optical tracking do most of the work of the redesign.
+ *
+ * Core: h1..h6 { font-weight: 400; color: #222 } + html.dark-mode variant.
+ */
+h1, h2, h3, h4, h5, h6 {
+  font-weight: 600;
+  color: var(--text-strong);
+  text-wrap: balance;
+}
+html.dark-mode h1,
+html.dark-mode h2,
+html.dark-mode h3,
+html.dark-mode h4,
+html.dark-mode h5,
+html.dark-mode h6 {
+  color: var(--text-strong);
+}
+
+h1 {
+  font-size: 3.2em;
+  line-height: 1.12;
+  letter-spacing: -0.028em;
+  margin-top: 0;
+  margin-bottom: 0.42em;
+}
+h2 {
+  font-size: 2.45em;
+  line-height: 1.18;
+  letter-spacing: -0.022em;
+  margin-top: 0.9em;
+  margin-bottom: 0.38em;
+}
+h3 {
+  font-size: 1.95em;
+  line-height: 1.24;
+  letter-spacing: -0.018em;
+  margin-top: 0.9em;
+  margin-bottom: 0.38em;
+}
+h4 {
+  font-size: 1.5em;
+  line-height: 1.32;
+  letter-spacing: -0.012em;
+  margin-top: 0.9em;
+  margin-bottom: 0.4em;
+}
+h5 {
+  font-size: 1.24em;
+  line-height: 1.4;
+  letter-spacing: -0.008em;
+}
+h6 {
+  font-size: 1.05em;
+  line-height: 1.45;
+}
+
+@include smaller-than($bp-s) {
+  h1 { font-size: 2.45em; letter-spacing: -0.024em; }
+  h2 { font-size: 1.95em; }
+  h3 { font-size: 1.6em; }
+  h4 { font-size: 1.3em; }
+  h5 { font-size: 1.15em; }
+}
+
+.list-heading {
+  font-size: 1.85rem;
+  letter-spacing: -0.02em;
+  line-height: 1.2;
+}
+h2.list-heading {
+  font-size: 1.25rem;
+  letter-spacing: -0.012em;
+}
+
+/**
+ * List rows use heading elements for their titles so the document outline is
+ * right, but a row title is not a section heading visually — it gets label
+ * weight rather than the display weight h1-h6 now carry.
+ */
+.entity-list-item-name {
+  font-weight: 500;
+  font-size: 1.05rem;
+  line-height: 1.35;
+  letter-spacing: -0.008em;
+  color: var(--text-strong);
+}
+html.dark-mode .entity-list-item-name {
+  color: var(--text-strong);
+}
+
+p {
+  text-wrap: pretty;
+}
+
+strong, b, .bold, .strong {
+  font-weight: 600;
+}
+
+a {
+  text-underline-offset: 0.16em;
+  text-decoration-thickness: from-font;
+}
+
+/* Numbers that get compared down a column need fixed-width figures. */
+.tabular-nums,
+table.table td,
+ul.pagination,
+.entity-meta-item,
+.item-list-row {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Core: hr { background: #eaeaea } + dark #555 */
+hr {
+  @include ld1(background, var(--border-subtle));
+}
+
+/* Core: .text-muted / .text-dark use lightDark with !important. */
+.text-muted {
+  @include ld1(color, var(--text-muted) !important);
+}
+.text-dark {
+  @include ld1(color, var(--text-strong) !important);
+}
+
+span.sep {
+  color: var(--text-subtle);
+}
+
+/* Code. Core: .code-base { border #DDD; background #f8f8f8 } + dark variants. */
+.code-base,
+code,
+span.code {
+  @include ld(("border-color", var(--border)), ("background-color", var(--bg-surface-alt)));
+  border-radius: var(--radius-xs);
+}
+
+code {
+  padding: 0.1em 0.35em;
+}
+
+/* Core: pre { border #DDD; background #FFF } + dark variants, with a gutter
+   drawn by pre:before. */
+pre {
+  @include ld(("background-color", var(--bg-surface-alt)), ("border-color", var(--border)));
+  border-radius: var(--radius-md);
+}
+pre:before {
+  @include ld1(background-color, var(--bg-inset));
+  border-start-start-radius: var(--radius-md);
+  border-end-start-radius: var(--radius-md);
+}
+
+blockquote {
+  @include ld1(background-color, var(--bg-surface-alt));
+  border-left-width: 3px;
+  border-radius: 0 var(--radius-md) var(--radius-md) 0;
+}
+blockquote:before {
+  color: var(--text-subtle);
+  line-height: 1;
+}

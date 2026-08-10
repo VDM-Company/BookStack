@@ -1,0 +1,248 @@
+@use "tools" as *;
+
+/**
+ * Buttons and form controls.
+ */
+
+/* Mirrors core's compiled `.input-base` selector list. Core builds it with an
+   @extend, so every one of these selectors carries the same declarations and
+   each has to be named again here to override at equal specificity. */
+$inputs: ".input-base, .fake-input, input[type='text'], input[type='number'], input[type='email'], input[type='date'], input[type='search'], input[type='url'], input[type='color'], input[type='password'], select, textarea";
+
+/**
+ * Buttons.
+ *
+ * Hover lifts the control slightly and deepens its shadow; press returns it to
+ * the surface and shrinks it a touch, so a click reads as something physically
+ * depressing rather than a colour swap. Both are transform-driven so they stay
+ * on the compositor.
+ *
+ * Brightness filters carry the accent states because --color-primary is
+ * administrator-configurable and could be any hue.
+ */
+.button {
+  font-weight: 500;
+  letter-spacing: -0.004em;
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-xs);
+  transition: background-color var(--dur-fast) var(--ease-out),
+              filter var(--dur-fast) var(--ease-out),
+              transform var(--dur-fast) var(--ease-out),
+              box-shadow var(--dur-fast) var(--ease-out);
+
+  &:hover {
+    box-shadow: var(--shadow-md);
+    filter: brightness(1.08);
+    transform: translate3d(0, -1px, 0);
+  }
+  &:active {
+    filter: brightness(0.94);
+    transform: translate3d(0, 0, 0) scale(0.985);
+    box-shadow: var(--shadow-xs);
+  }
+  /* Core sets a dotted outline and a brightness drop on :focus, which fires on
+     mouse clicks too. Restrict both to keyboard focus. */
+  &:focus:not(:focus-visible) {
+    outline: none;
+    filter: none;
+  }
+  &:focus-visible {
+    outline: var(--focus-ring-width) solid var(--focus-ring);
+    outline-offset: var(--focus-ring-offset);
+  }
+}
+html.dark-mode .button:hover {
+  box-shadow: var(--shadow-md);
+}
+
+.button.outline {
+  @include ld(("background-color", var(--bg-surface)), ("color", var(--text-muted)), ("border-color", var(--border)));
+  box-shadow: var(--shadow-xs);
+
+  &:hover, &:focus, &:active {
+    @include ld(("color", var(--text-strong)), ("border-color", var(--border-strong)),
+                ("background-color", var(--bg-surface-alt)));
+    filter: none;
+  }
+  &:hover {
+    box-shadow: var(--shadow-sm);
+  }
+  &:active {
+    @include ld1(background-color, var(--bg-hover));
+    box-shadow: none;
+    transform: translate3d(0, 0, 0) scale(0.985);
+  }
+}
+
+.button.small {
+  border-radius: var(--radius-sm);
+}
+
+/**
+ * Destructive actions.
+ *
+ * Stock BookStack submits every delete confirmation through the plain primary
+ * button — the same control as "Save", so a permanent delete and a routine
+ * save are visually identical. The class is applied by the theme's JS on
+ * confirmation screens, since core emits no hook of its own.
+ */
+.button.refresh-destructive {
+  background-color: var(--destructive);
+  border-color: var(--destructive);
+  color: #FFF;
+
+  &:hover, &:focus, &:active {
+    background-color: var(--destructive);
+    color: #FFF;
+  }
+  &:focus-visible {
+    outline-color: var(--destructive);
+  }
+}
+
+.button[disabled] {
+  @include ld(("background-color", var(--bg-inset)), ("color", var(--text-subtle)),
+              ("border-color", var(--border)));
+  box-shadow: none;
+  filter: none;
+
+  &:hover, &:active {
+    @include ld(("background-color", var(--bg-inset)), ("color", var(--text-subtle)));
+    box-shadow: none;
+    filter: none;
+    transform: none;
+  }
+}
+
+.icon-button {
+  border-radius: var(--radius-sm);
+  transition: background-color var(--dur-fast) var(--ease-out),
+              border-color var(--dur-fast) var(--ease-out),
+              transform var(--dur-fast) var(--ease-out);
+}
+.icon-button:hover {
+  @include ld(("background-color", var(--bg-hover)), ("border-color", var(--border-subtle)));
+  border-radius: var(--radius-sm);
+}
+.icon-button:active {
+  @include ld1(background-color, var(--bg-active));
+  transform: scale(0.94);
+}
+
+.text-button {
+  font-weight: 500;
+  transition: color var(--dur-fast) var(--ease-out);
+}
+
+/**
+ * Inputs.
+ */
+#{$inputs} {
+  @include ld(("border-color", var(--border-input)), ("background-color", var(--bg-surface)),
+              ("color", var(--text)));
+  border-radius: var(--radius-md);
+  transition: border-color var(--dur-fast) var(--ease-out),
+              box-shadow var(--dur-fast) var(--ease-out),
+              background-color var(--dur-fast) var(--ease-out);
+}
+
+#{$inputs} {
+  &::placeholder {
+    /* Placeholder text is real text and needs the 4.5:1 tier. */
+    color: var(--text-muted);
+  }
+
+  &:hover:not(:focus):not([disabled]):not([readonly]) {
+    @include ld1(border-color, var(--text-subtle));
+  }
+
+  &:focus {
+    border-color: var(--color-primary);
+    outline: none;
+    box-shadow: 0 0 0 3px var(--color-primary-light);
+  }
+
+  /* Core marks invalid fields with a colour-only text utility. Pair it with a
+     border and a tinted ring so the state is not carried by colour alone. */
+  &.neg, &.invalid, &.text-neg, &[aria-invalid="true"] {
+    border-color: var(--color-negative);
+    box-shadow: 0 0 0 3px rgba(171, 15, 14, 0.12);
+  }
+  &.pos, &.valid {
+    border-color: var(--color-positive);
+    box-shadow: 0 0 0 3px rgba(15, 125, 21, 0.12);
+  }
+
+  &.disabled, &[disabled] {
+    @include ld(("background-color", var(--bg-inset)), ("color", var(--text-subtle)));
+    cursor: not-allowed;
+  }
+  &[readonly] {
+    @include ld1(background-color, var(--bg-surface-alt));
+  }
+}
+
+/* The select caret is a data-URI so it cannot inherit currentColor; it has to
+   be swapped per scheme or dark mode gets a near-black arrow on a dark fill. */
+select {
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='100' height='100' fill='%23677282'><polygon points='0,0 100,0 50,50'/></svg>");
+  padding-inline-end: 38px;
+}
+html.dark-mode select {
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='100' height='100' fill='%23838d9d'><polygon points='0,0 100,0 50,50'/></svg>");
+}
+
+label {
+  @include ld1(color, var(--text-strong));
+  font-weight: 500;
+}
+
+.setting-list > div {
+  @include ld1(border-bottom-color, var(--border-subtle));
+}
+.setting-list-label {
+  @include ld1(color, var(--text-strong));
+  font-weight: 600;
+  letter-spacing: -0.008em;
+}
+
+/* Core renders inline field errors as a colour-only text utility. Give them a
+   consistent rhythm so they read as attached to the control above. */
+.form-group .text-neg.text-small {
+  display: block;
+  color: var(--color-negative);
+  font-size: 0.8rem;
+  line-height: 1.4;
+  margin-top: 6px;
+}
+
+.contained-search-box {
+  &.floating {
+    box-shadow: var(--shadow-md);
+    border-radius: var(--radius-md);
+    @include ld1(border, 1px solid var(--border-subtle));
+  }
+  input, button {
+    @include ld1(border-color, var(--border-subtle));
+  }
+  button {
+    @include ld(("background-color", var(--bg-surface)), ("color", var(--text)));
+    transition: background-color var(--dur-fast) var(--ease-out);
+  }
+  button:hover {
+    @include ld1(background-color, var(--bg-hover));
+  }
+}
+
+.outline > input {
+  @include ld1(border-bottom-color, var(--border));
+  box-shadow: none;
+  &:focus, &:active {
+    border-bottom-color: var(--color-primary);
+    box-shadow: none;
+  }
+}
+
+table.form-table td {
+  overflow: visible;
+}
