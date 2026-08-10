@@ -78,7 +78,7 @@
         var url;
         try {
             url = new URL(href, window.location.href);
-        } catch (err) {
+        } catch {
             return false;
         }
         if (url.protocol !== 'http:' && url.protocol !== 'https:') {
