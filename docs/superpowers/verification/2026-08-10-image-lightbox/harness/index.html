@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Lightbox fixtures</title>
+<link rel="stylesheet" href="/theme/refresh/css/theme.css">
+<style>
+  /* Stand-ins for the core layout rules the theme sits on top of. */
+  body { font-family: sans-serif; margin: 0; padding: 2rem; }
+  .page-content img { max-width: 100%; height: auto; }
+  .comment-box { border: 1px solid #ccc; padding: 1rem; margin-top: 2rem; }
+  .editor-content-area { border: 1px dashed #999; padding: 1rem; margin-top: 2rem; }
+  .spacer { height: 1500px; }
+</style>
+<script defer src="/theme/refresh/js/lightbox.js"></script>
+</head>
+<body>
+
+<a href="#" id="before">focusable before</a>
+
+<div class="page-content">
+  <p>1. Standard BookStack insert, linked to the original:</p>
+  <p><a id="l1" href="/uploads/images/lbtest/big.png"><img id="i1" src="/uploads/images/lbtest/big-thumb.png" alt="Big fixture image"></a></p>
+  <p>2. Second standard insert, for gallery navigation:</p>
+  <p><a id="l2" href="/uploads/images/lbtest/second.png"><img id="i2" src="/uploads/images/lbtest/second-thumb.png" alt="Second fixture image"></a></p>
+  <p>3. Unlinked image:</p>
+  <p><img id="i3" src="/uploads/images/lbtest/small.png" alt="Small unlinked image"></p>
+  <p>4. Image used as a link to another page, which must still navigate:</p>
+  <p><a id="l4" href="/books/lightbox-test"><img id="i4" src="/uploads/images/lbtest/small.png" alt="Navigation image"></a></p>
+  <p>5. Small image linked to its own small original, where zoom must be inert:</p>
+  <p><a id="l5" href="/uploads/images/lbtest/small.png"><img id="i5" src="/uploads/images/lbtest/small.png" alt="Small original"></a></p>
+</div>
+
+<!-- A comment: its own container, so it navigates independently of the page body. -->
+<div class="comment-box">
+  <div class="content">
+    <p><a id="lc" href="/uploads/images/lbtest/second.png"><img id="ic" src="/uploads/images/lbtest/second-thumb.png" alt="Comment image"></a></p>
+  </div>
+</div>
+
+<!-- The WYSIWYG editable root: contenteditable AND .page-content, as in core. -->
+<div class="editor-content-area">
+  <div class="page-content" contenteditable="true">
+    <p><a id="le" href="/uploads/images/lbtest/big.png"><img id="ie" src="/uploads/images/lbtest/big-thumb.png" alt="Editor image"></a></p>
+  </div>
+</div>
+
+<!-- The markdown preview: a same-origin iframe whose body core sets to
+     page-content (resources/js/markdown/display.ts:35). -->
+<iframe id="mdpreview" src="about:blank" sandbox="allow-same-origin"
+        class="markdown-display" style="width:400px;max-width:100%;height:260px;border:0"></iframe>
+<script>
+  window.addEventListener('load', function() {
+      var doc = document.getElementById('mdpreview').contentDocument;
+      doc.body.className = 'page-content';
+      doc.body.innerHTML = '<p><a id="lm" href="/uploads/images/lbtest/big.png">'
+          + '<img id="im" src="/uploads/images/lbtest/big-thumb.png" alt="Preview image"></a></p>';
+  });
+</script>
+
+<div class="spacer"></div>
+
+<!-- Far down the page, so opening here tests scroll preservation honestly. -->
+<div class="page-content">
+  <p><a id="lf" href="/uploads/images/lbtest/big.png"><img id="if" src="/uploads/images/lbtest/big-thumb.png" alt="Far down the page"></a></p>
+</div>
+
+<div class="spacer"></div>
+</body>
+</html>

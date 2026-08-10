@@ -25,6 +25,11 @@ Then `php artisan config:clear`. No build step — the compiled CSS is committed
   confirmations get their own colour.
 - **Contrast** — the neutral tiers are tuned so body text clears WCAG AA 4.5:1
   and secondary text clears 3:1, in both colour schemes.
+- **Images** — clicking an image in page content or a comment opens it
+  enlarged in an overlay, rather than navigating away to the raw image file.
+  Arrow keys move through the images around it; clicking the image toggles
+  actual size with drag-to-pan. Images an author linked to something other
+  than an image still navigate.
 
 ## How it works
 
@@ -37,11 +42,12 @@ themes/refresh/
 ├── public/
 │   ├── css/theme.css                   compiled, committed
 │   ├── js/theme.js                     two DOM hooks core doesn't emit
+│   ├── js/lightbox.js                  image lightbox
 │   └── fonts/                          Geist + Geist Mono (SIL OFL)
 └── src/                                stylesheet source
 ```
 
-Three mechanisms do the work:
+Four mechanisms do the work:
 
 **1. A stylesheet loaded after core's.** `custom-head.blade.php` links
 `theme.css`, which lands after `dist/styles.css` in `<head>`. Overrides at
@@ -72,6 +78,17 @@ override the administrator's colour pickers in *Settings → Customization* with
 way to change them back. `SettingService::get()` reads the database first and only
 falls back to these defaults, so an explicit admin choice always wins.
 
+**4. A delegated click listener in `lightbox.js`.** Image clicks in
+`.page-content` and `.comment-box .content` open an overlay instead of
+navigating. Nothing is scanned at load, so comments rendered after page load
+need no re-initialisation. The one subtlety is that the WYSIWYG editor's
+editable root is a same-document `contenteditable` div that *also* carries the
+`page-content` class, so the handler explicitly excludes `[contenteditable]`
+and `.editor-content-area` — without that, images could not be selected while
+editing. The markdown preview needs no exclusion: it is a separate `about:blank`
+iframe, so the parent document's listener never sees its clicks. If the script
+fails to load, images remain plain links to the original.
+
 ## Upgrading BookStack
 
 Core is untouched, so upgrade normally. Two things to check afterwards:
@@ -85,8 +102,13 @@ Core is untouched, so upgrade normally. Two things to check afterwards:
    `src/` stop applying — they fail silently and safely, reverting that component
    to stock styling rather than breaking it.
 
-Everything else — `theme.css`, `theme.js`, `functions.php`, `lang/` — is additive
-and cannot conflict.
+   The lightbox additionally depends on `.page-content`,
+   `.comment-box .content` and `.editor-content-area`. If a release renames
+   these, the lightbox stops matching and images revert to plain links — it
+   fails safe, but check it after a major upgrade.
+
+Everything else — `theme.css`, `theme.js`, `lightbox.js`, `functions.php`,
+`lang/` — is additive and cannot conflict.
 
 ## Editing
 
