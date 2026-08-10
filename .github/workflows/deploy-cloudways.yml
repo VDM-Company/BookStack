@@ -113,16 +113,46 @@ jobs:
       # ------------------------------------------------------------------ ssh
 
       - name: Configure SSH
+        env:
+          SSH_HOST: ${{ secrets.CLOUDWAYS_HOST }}
         run: |
           set -euo pipefail
           mkdir -p ~/.ssh
           chmod 700 ~/.ssh
           printf '%s\n' "${{ secrets.CLOUDWAYS_SSH_KEY }}" > ~/.ssh/deploy_key
           chmod 600 ~/.ssh/deploy_key
-          # Trust-on-first-use. To pin the host key instead, capture the
-          # output of `ssh-keyscan <host>` once and store it as a secret,
-          # then write that here rather than scanning at run time.
-          ssh-keyscan -H "${{ secrets.CLOUDWAYS_HOST }}" >> ~/.ssh/known_hosts 2>/dev/null
+
+          # Confirm the secret actually holds a usable PRIVATE key before we
+          # try to authenticate with it. A public key pasted here parses as a
+          # key file but cannot sign, producing a baffling "Permission denied".
+          if ! ssh-keygen -y -P "" -f ~/.ssh/deploy_key > /dev/null 2>&1; then
+            echo "::error::CLOUDWAYS_SSH_KEY is not a usable passphrase-free private key."
+            echo "It must be the PRIVATE half (-----BEGIN ... PRIVATE KEY-----),"
+            echo "not the ssh-rsa/ssh-ed25519 public key, and must have no passphrase."
+            exit 1
+          fi
+          echo "Deploy key: $(ssh-keygen -l -f ~/.ssh/deploy_key)"
+
+          # Trust-on-first-use. ssh-keyscan can fail transiently, and its
+          # stderr was previously discarded, which turned any failure into a
+          # silent step error. Retry, and show why when it does not work.
+          for attempt in 1 2 3; do
+            ssh-keyscan -T 10 -H "$SSH_HOST" >> ~/.ssh/known_hosts 2>/tmp/keyscan.err || true
+            if [ -s ~/.ssh/known_hosts ]; then
+              echo "Host key scanned on attempt $attempt."
+              break
+            fi
+            echo "ssh-keyscan attempt $attempt produced no host key:"
+            cat /tmp/keyscan.err || true
+            [ "$attempt" -lt 3 ] && sleep 5
+          done
+          if [ ! -s ~/.ssh/known_hosts ]; then
+            echo "::error::Could not retrieve the host key for the server."
+            echo "The host may be unreachable on port 22 from GitHub's runners,"
+            echo "or blocking them. Check CLOUDWAYS_HOST and any firewall rules."
+            exit 1
+          fi
+
           cat >> ~/.ssh/config <<'SSHCONF'
           Host cloudways
             User ${{ secrets.CLOUDWAYS_USER }}
