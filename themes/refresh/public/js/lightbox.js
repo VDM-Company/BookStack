@@ -185,6 +185,12 @@
         closeButton.addEventListener('click', close);
         root.addEventListener('click', onOverlayClick);
         img.addEventListener('load', onImageLoad);
+        prev.addEventListener('click', function() {
+            step(-1);
+        });
+        next.addEventListener('click', function() {
+            step(1);
+        });
     }
 
     function onOverlayClick(event) {
@@ -239,10 +245,16 @@
         var full = sourceFor(item);
         var caption = item.getAttribute('alt') || '';
 
+        var multiple = state.items.length > 1;
+
         ui.img.alt = caption;
         ui.caption.textContent = caption;
         ui.caption.hidden = caption === '';
-        ui.bar.hidden = caption === '';
+        ui.counter.textContent = (index + 1) + ' / ' + state.items.length;
+        ui.counter.hidden = !multiple;
+        ui.bar.hidden = caption === '' && !multiple;
+        ui.prev.hidden = !multiple;
+        ui.next.hidden = !multiple;
         ui.root.classList.remove('rl-loading');
 
         if (thumb) {
@@ -275,6 +287,20 @@
             }
         };
         loader.src = full;
+    }
+
+    /**
+     * Move through the set, wrapping at both ends. The set is the eligible
+     * images in the container the user clicked in, so a page body and each
+     * comment navigate independently — which is what makes the counter
+     * meaningful.
+     */
+    function step(delta) {
+        var count = state.items.length;
+        if (count < 2) {
+            return;
+        }
+        show(((state.index + delta) % count + count) % count);
     }
 
     function openAt(items, index) {
@@ -350,6 +376,12 @@
         }
         if (event.key === 'Escape') {
             close();
+            event.preventDefault();
+        } else if (event.key === 'ArrowLeft') {
+            step(-1);
+            event.preventDefault();
+        } else if (event.key === 'ArrowRight') {
+            step(1);
             event.preventDefault();
         } else if (event.key === 'Tab') {
             trapFocus(event);
