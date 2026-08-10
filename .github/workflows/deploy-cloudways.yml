@@ -1,0 +1,250 @@
+name: Deploy to Cloudways
+
+# Builds the application on the runner and ships the result to Cloudways over
+# SSH. Nothing is built on the production server: it needs no Node toolchain
+# and no devDependencies, and a broken build fails here rather than half-way
+# through a deploy.
+#
+# Required repository secrets (Settings > Secrets and variables > Actions):
+#   CLOUDWAYS_SSH_KEY    private key whose public half is on the Cloudways app
+#   CLOUDWAYS_HOST       server address, e.g. 123.45.67.89
+#   CLOUDWAYS_USER       SSH user, e.g. master_abcdefghij
+#   CLOUDWAYS_APP_PATH   absolute app root, e.g.
+#                        /home/master/applications/abcdefghij/public_html
+#
+# Optional repository variable:
+#   PRODUCTION_URL       https://docs.example.com — enables the health check
+
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Dry run — list what would change, transfer nothing"
+        type: boolean
+        default: true
+      run_migrations:
+        description: "Run database migrations"
+        type: boolean
+        default: true
+
+# Never let two deploys interleave on the same server. Queue instead of
+# cancelling: a cancelled deploy could leave the app in maintenance mode.
+concurrency:
+  group: deploy-cloudways-production
+  cancel-in-progress: false
+
+env:
+  # Matches the composer.json platform pin, so vendor/ resolves for PHP 8.2+
+  # regardless of what the runner or the Cloudways server happens to run.
+  PHP_VERSION: "8.2"
+  # Matches the Node used by the dev container (node:22-alpine).
+  NODE_VERSION: "22"
+
+jobs:
+  deploy:
+    name: Build and deploy
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: production
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # ---------------------------------------------------------------- build
+
+      - name: Set up PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ env.PHP_VERSION }}
+          # The ext-* requirements declared in composer.json. composer.json
+          # pins config.platform.php but not the extensions, so these must be
+          # genuinely present or `composer install` refuses to resolve.
+          extensions: curl, dom, fileinfo, gd, json, mbstring, xml, zip
+          coverage: none
+          tools: composer:v2
+
+      - name: Install PHP dependencies
+        run: |
+          composer install \
+            --no-dev \
+            --optimize-autoloader \
+            --prefer-dist \
+            --no-interaction \
+            --no-progress
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - name: Install JS dependencies
+        # `npm ci` needs package-lock.json to agree with package.json. It also
+        # installs devDependencies, which is correct here — esbuild, sass and
+        # npm-run-all are all devDependencies and the build cannot run without
+        # them. None of this reaches the server.
+        run: npm ci
+
+      - name: Build production assets
+        # `production`, not `build`. `build` is the dev target: it skips
+        # minification and embeds sources, producing several times the bytes.
+        run: npm run production
+
+      - name: Verify build output
+        # public/dist is not tracked in git, so if this step is wrong the
+        # deploy would ship an app with no CSS or JS at all. Fail loudly here.
+        run: |
+          set -euo pipefail
+          missing=0
+          for f in app.js code.js legacy-modes.js markdown.js wysiwyg.js \
+                   styles.css export-styles.css; do
+            if [ ! -s "public/dist/$f" ]; then
+              echo "::error::public/dist/$f is missing or empty"
+              missing=1
+            fi
+          done
+          [ "$missing" -eq 0 ] || exit 1
+          echo "Built assets:"
+          ls -lh public/dist/*.js public/dist/*.css
+
+      # ------------------------------------------------------------------ ssh
+
+      - name: Configure SSH
+        run: |
+          set -euo pipefail
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          printf '%s\n' "${{ secrets.CLOUDWAYS_SSH_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          # Trust-on-first-use. To pin the host key instead, capture the
+          # output of `ssh-keyscan <host>` once and store it as a secret,
+          # then write that here rather than scanning at run time.
+          ssh-keyscan -H "${{ secrets.CLOUDWAYS_HOST }}" >> ~/.ssh/known_hosts 2>/dev/null
+          cat >> ~/.ssh/config <<'SSHCONF'
+          Host cloudways
+            User ${{ secrets.CLOUDWAYS_USER }}
+            HostName ${{ secrets.CLOUDWAYS_HOST }}
+            IdentityFile ~/.ssh/deploy_key
+            IdentitiesOnly yes
+            StrictHostKeyChecking yes
+            ServerAliveInterval 30
+          SSHCONF
+          chmod 600 ~/.ssh/config
+
+      - name: Verify connection and app path
+        run: |
+          set -euo pipefail
+          ssh cloudways "test -f '${{ secrets.CLOUDWAYS_APP_PATH }}/artisan'" \
+            || { echo "::error::No artisan found at CLOUDWAYS_APP_PATH — check the path"; exit 1; }
+          echo "Remote PHP: $(ssh cloudways 'php -v | head -1')"
+          ssh cloudways "command -v rsync >/dev/null" \
+            || { echo "::error::rsync is not installed on the server"; exit 1; }
+
+      # -------------------------------------------------------------- deploy
+
+      - name: Enable maintenance mode
+        if: ${{ !inputs.dry_run }}
+        run: |
+          ssh cloudways "cd '${{ secrets.CLOUDWAYS_APP_PATH }}' && php artisan down --retry=60" || true
+
+      - name: Sync files
+        # --delete removes files upstream has dropped. Every --exclude below is
+        # also protected from that deletion, which is what keeps production
+        # data safe:
+        #   .env                  production config, never overwritten
+        #   public/uploads        images  (STORAGE_TYPE=local)
+        #   storage/uploads       images + attachments (local_secure*)
+        #   storage/app|backups   application data and backups
+        #   storage/framework     cache, sessions, compiled views, the `down` flag
+        #   storage/logs          logs
+        #   bootstrap/cache       environment state; regenerated below
+        #   themes/my_theme       untracked locally, so absent from the runner —
+        #                         without this it would be deleted on the server
+        # dev/ is deliberately NOT excluded: MetaController reads
+        # dev/licensing/*.txt at runtime to render the /licenses page.
+        run: |
+          set -euo pipefail
+          rsync -az --delete --human-readable \
+            ${{ inputs.dry_run && '--dry-run --itemize-changes' || '' }} \
+            --exclude='/.git' \
+            --exclude='/.github' \
+            --exclude='/.forgejo' \
+            --exclude='/.idea' \
+            --exclude='/node_modules' \
+            --exclude='/tests' \
+            --exclude='/.env' \
+            --exclude='/storage/app' \
+            --exclude='/storage/backups' \
+            --exclude='/storage/clockwork' \
+            --exclude='/storage/framework' \
+            --exclude='/storage/logs' \
+            --exclude='/storage/uploads' \
+            --exclude='/storage/fonts/dompdf/cache' \
+            --exclude='/public/uploads' \
+            --exclude='/public/plugins' \
+            --exclude='/bootstrap/cache' \
+            --exclude='/themes/my_theme' \
+            ./ "cloudways:${{ secrets.CLOUDWAYS_APP_PATH }}/"
+
+      - name: Migrate and refresh caches
+        if: ${{ !inputs.dry_run }}
+        env:
+          RUN_MIGRATIONS: ${{ inputs.run_migrations }}
+          APP_PATH: ${{ secrets.CLOUDWAYS_APP_PATH }}
+        run: |
+          set -euo pipefail
+          ssh cloudways "APP_PATH='$APP_PATH' RUN_MIGRATIONS='$RUN_MIGRATIONS' bash -euo pipefail -s" <<'REMOTE'
+            cd "$APP_PATH"
+
+            # bootstrap/cache is excluded from the sync, so its compiled
+            # package manifest still describes the previous vendor/ tree.
+            # Rebuild it against what was just deployed.
+            php artisan clear-compiled
+            php artisan package:discover --ansi
+
+            if [ "$RUN_MIGRATIONS" = "true" ]; then
+              php artisan migrate --force
+            else
+              echo "Migrations skipped by request."
+            fi
+
+            php artisan cache:clear
+            php artisan config:clear
+            php artisan view:clear
+          REMOTE
+
+      - name: Disable maintenance mode
+        if: ${{ !inputs.dry_run }}
+        run: |
+          ssh cloudways "cd '${{ secrets.CLOUDWAYS_APP_PATH }}' && php artisan up"
+
+      # ------------------------------------------------------------- verify
+
+      - name: Health check
+        if: ${{ !inputs.dry_run && vars.PRODUCTION_URL != '' }}
+        run: |
+          set -euo pipefail
+          for attempt in 1 2 3 4 5; do
+            code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 20 "${{ vars.PRODUCTION_URL }}/login" || echo 000)
+            echo "Attempt $attempt: HTTP $code"
+            if [ "$code" = "200" ]; then
+              echo "Site is up."
+              exit 0
+            fi
+            sleep 5
+          done
+          echo "::error::Health check never returned 200 — site may still be down"
+          exit 1
+
+      # If anything above failed after maintenance mode went on, the site is
+      # stranded behind a 503. Always try to bring it back.
+      - name: Recover from failed deploy
+        if: ${{ failure() && !inputs.dry_run }}
+        run: |
+          echo "::warning::Deploy failed — attempting to lift maintenance mode"
+          ssh cloudways "cd '${{ secrets.CLOUDWAYS_APP_PATH }}' && php artisan up" || true
+
+      - name: Clean up SSH key
+        if: always()
+        run: rm -f ~/.ssh/deploy_key
