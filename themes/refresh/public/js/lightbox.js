@@ -182,24 +182,24 @@
             next: next
         };
 
-        closeButton.addEventListener('click', close);
-        root.addEventListener('click', onOverlayClick);
-        img.addEventListener('load', onImageLoad);
-        prev.addEventListener('click', function() {
+        closeButton.addEventListener('click', guard(close));
+        root.addEventListener('click', guard(onOverlayClick));
+        img.addEventListener('load', guard(onImageLoad));
+        prev.addEventListener('click', guard(function() {
             step(-1);
-        });
-        next.addEventListener('click', function() {
+        }));
+        next.addEventListener('click', guard(function() {
             step(1);
-        });
-        stage.addEventListener('pointerdown', onPointerDown);
-        stage.addEventListener('pointermove', onPointerMove);
-        stage.addEventListener('pointerup', onPointerUp);
-        stage.addEventListener('pointercancel', onPointerUp);
-        window.addEventListener('resize', function() {
+        }));
+        stage.addEventListener('pointerdown', guard(onPointerDown));
+        stage.addEventListener('pointermove', guard(onPointerMove));
+        stage.addEventListener('pointerup', guard(onPointerUp));
+        stage.addEventListener('pointercancel', guard(onPointerUp));
+        window.addEventListener('resize', guard(function() {
             if (state.open && !state.zoomed) {
                 updateZoomAffordance();
             }
-        });
+        }));
     }
 
     function onOverlayClick(event) {
@@ -212,7 +212,8 @@
             toggleZoom(event.clientX, event.clientY);
             return;
         }
-        if (event.target === ui.root || event.target === ui.stage) {
+        if (event.target === ui.root || event.target === ui.stage
+                || event.target === ui.bar) {
             close();
         }
     }
@@ -432,6 +433,9 @@
     }
 
     function openAt(items, index) {
+        if (state.open) {
+            return;
+        }
         if (!ui) {
             buildUi();
         }
@@ -439,12 +443,12 @@
         state.lastFocus = document.activeElement;
         show(index);
         ui.root.hidden = false;
+        state.open = true;
         // Next frame, so the opening transition has a state to animate from.
         window.requestAnimationFrame(function() {
             ui.root.classList.add('rl-open');
         });
         lockScroll();
-        state.open = true;
         ui.close.focus();
     }
 
@@ -452,13 +456,13 @@
         if (!state.open) {
             return;
         }
+        unlockScroll();
         state.open = false;
         state.loadToken += 1;
         ui.root.classList.remove('rl-open', 'rl-loading');
         ui.root.hidden = true;
         ui.img.removeAttribute('src');
         resetZoom();
-        unlockScroll();
         if (state.lastFocus && state.lastFocus.focus) {
             state.lastFocus.focus();
         }
@@ -522,7 +526,7 @@
      * single-image lightbox traps on the close button alone.
      */
     function trapFocus(event) {
-        var focusable = [ui.prev, ui.next, ui.close].filter(function(node) {
+        var focusable = [ui.close, ui.prev, ui.next].filter(function(node) {
             return !node.hidden;
         });
         if (!focusable.length) {
