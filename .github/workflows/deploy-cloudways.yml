@@ -244,39 +244,84 @@ jobs:
         #
         # dev/ is deliberately NOT excluded: MetaController reads
         # dev/licensing/*.txt at runtime to render the /licenses page.
+        env:
+          APP_PATH: ${{ secrets.CLOUDWAYS_APP_PATH }}
+          DRY_RUN: ${{ inputs.dry_run }}
         run: |
           set -euo pipefail
-          # --omit-dir-times: Cloudways directories are not owned by the deploy
-          # user, so rsync cannot set their mtimes and exits 23 ("some files/
-          # attrs were not transferred") even though every file transferred
-          # correctly. That exit code then skipped the migration step and left
-          # the app deployed but un-migrated. File times are still preserved;
-          # only directory times are skipped.
-          rsync -az --omit-dir-times --delete --human-readable \
-            ${{ inputs.dry_run && '--dry-run --itemize-changes' || '' }} \
-            --exclude='/.git' \
-            --exclude='/.github' \
-            --exclude='/.forgejo' \
-            --exclude='/.idea' \
-            --exclude='/node_modules' \
-            --exclude='/tests' \
-            --exclude='/.env' \
-            --exclude='/storage/app' \
-            --exclude='/storage/backups' \
-            --exclude='/storage/clockwork' \
-            --exclude='/storage/framework' \
-            --exclude='/storage/logs' \
-            --exclude='/storage/uploads' \
-            --exclude='/storage/fonts/dompdf/cache' \
-            --exclude='/public/uploads' \
-            --exclude='/public/plugins' \
-            --exclude='/public/favicon.ico' \
-            --exclude='/public/robots.txt' \
-            --exclude='/storage/fonts/*.json' \
-            --exclude='/bootstrap/cache' \
-            --include='/themes/refresh/***' \
-            --exclude='/themes/*' \
-            ./ "cloudways:${{ secrets.CLOUDWAYS_APP_PATH }}/"
+
+          # About half this app's directories are owned by a different system
+          # user (master_*) while we connect as the application user. Creating
+          # and deleting files inside them is allowed; writing their metadata
+          # is not. So rsync can set neither directory times nor permissions,
+          # and exits 23 despite transferring every file correctly. That exit
+          # code once skipped the migration step and left the app deployed but
+          # un-migrated. --omit-dir-times and --no-perms remove both causes.
+          # File mtimes are still preserved, which rsync's quick-check needs on
+          # later runs.
+          # Every element is quoted. The patterns contain * and ***, which the
+          # shell would otherwise attempt to glob before rsync ever sees them.
+          FILTERS=(
+            '--exclude=/.git'
+            '--exclude=/.github'
+            '--exclude=/.forgejo'
+            '--exclude=/.idea'
+            '--exclude=/node_modules'
+            '--exclude=/tests'
+            '--exclude=/.env'
+            '--exclude=/storage/app'
+            '--exclude=/storage/backups'
+            '--exclude=/storage/clockwork'
+            '--exclude=/storage/framework'
+            '--exclude=/storage/logs'
+            '--exclude=/storage/uploads'
+            '--exclude=/storage/fonts/dompdf/cache'
+            '--exclude=/public/uploads'
+            '--exclude=/public/plugins'
+            '--exclude=/public/favicon.ico'
+            '--exclude=/public/robots.txt'
+            '--exclude=/storage/fonts/*.json'
+            '--exclude=/bootstrap/cache'
+            '--include=/themes/refresh/***'
+            '--exclude=/themes/*'
+          )
+          BASE=(-az --omit-dir-times --no-perms --delete --human-readable)
+          DEST="cloudways:$APP_PATH/"
+
+          if [ "$DRY_RUN" = "true" ]; then
+            rsync "${BASE[@]}" --dry-run --itemize-changes "${FILTERS[@]}" ./ "$DEST"
+            exit 0
+          fi
+
+          set +e
+          rsync "${BASE[@]}" "${FILTERS[@]}" ./ "$DEST"
+          rc=$?
+          set -e
+
+          if [ "$rc" -eq 0 ]; then
+            echo "Sync completed cleanly."
+            exit 0
+          fi
+          if [ "$rc" -ne 23 ] && [ "$rc" -ne 24 ]; then
+            echo "::error::rsync failed with exit code $rc"
+            exit "$rc"
+          fi
+
+          # 23/24 mean some attributes were skipped or a file vanished mid-run.
+          # Expected here, but not assumed harmless: prove no file *content* is
+          # still out of sync before allowing migrations to proceed. Treating
+          # 23 as success unconditionally would risk deploying a partial tree.
+          echo "::warning::rsync exited $rc (metadata could not be written). Verifying content..."
+          pending=$(rsync "${BASE[@]}" --dry-run --itemize-changes "${FILTERS[@]}" ./ "$DEST" \
+                      | grep -cE '^([<>ch]|\*deleting)' || true)
+          if [ "$pending" -eq 0 ]; then
+            echo "Verified: every file is in sync. Continuing."
+          else
+            echo "::error::$pending path(s) still differ after rsync exited $rc."
+            rsync "${BASE[@]}" --dry-run --itemize-changes "${FILTERS[@]}" ./ "$DEST" \
+              | grep -E '^([<>ch]|\*deleting)' | head -30
+            exit 1
+          fi
 
       - name: Migrate and refresh caches
         if: ${{ !inputs.dry_run }}
