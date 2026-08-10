@@ -192,8 +192,16 @@ jobs:
         #   storage/framework     cache, sessions, compiled views, the `down` flag
         #   storage/logs          logs
         #   bootstrap/cache       environment state; regenerated below
-        #   themes/my_theme       untracked locally, so absent from the runner —
-        #                         without this it would be deleted on the server
+        #
+        # Themes get an include/exclude pair rather than a list of names. Only
+        # themes/refresh is tracked in git, so every other theme directory is
+        # absent from the runner and --delete would remove it from the server.
+        # Production currently holds a `custom` theme that CI knows nothing
+        # about. Naming each one is fragile; `--include=/themes/refresh/***`
+        # ahead of `--exclude=/themes/*` deploys ours and leaves every other
+        # theme untouched, whatever it happens to be called. Order matters:
+        # rsync applies the first matching rule.
+        #
         # dev/ is deliberately NOT excluded: MetaController reads
         # dev/licensing/*.txt at runtime to render the /licenses page.
         run: |
@@ -217,7 +225,8 @@ jobs:
             --exclude='/public/uploads' \
             --exclude='/public/plugins' \
             --exclude='/bootstrap/cache' \
-            --exclude='/themes/my_theme' \
+            --include='/themes/refresh/***' \
+            --exclude='/themes/*' \
             ./ "cloudways:${{ secrets.CLOUDWAYS_APP_PATH }}/"
 
       - name: Migrate and refresh caches
