@@ -212,6 +212,7 @@ jobs:
           ssh cloudways "cd '${{ secrets.CLOUDWAYS_APP_PATH }}' && php artisan down --retry=60" || true
 
       - name: Sync files
+        id: sync
         # --delete removes files upstream has dropped. Every --exclude below is
         # also protected from that deletion, which is what keeps production
         # data safe:
@@ -245,7 +246,13 @@ jobs:
         # dev/licensing/*.txt at runtime to render the /licenses page.
         run: |
           set -euo pipefail
-          rsync -az --delete --human-readable \
+          # --omit-dir-times: Cloudways directories are not owned by the deploy
+          # user, so rsync cannot set their mtimes and exits 23 ("some files/
+          # attrs were not transferred") even though every file transferred
+          # correctly. That exit code then skipped the migration step and left
+          # the app deployed but un-migrated. File times are still preserved;
+          # only directory times are skipped.
+          rsync -az --omit-dir-times --delete --human-readable \
             ${{ inputs.dry_run && '--dry-run --itemize-changes' || '' }} \
             --exclude='/.git' \
             --exclude='/.github' \
@@ -329,13 +336,26 @@ jobs:
           echo "::error::Health check never returned 200 — site may still be down"
           exit 1
 
-      # If anything above failed after maintenance mode went on, the site is
-      # stranded behind a 503. Always try to bring it back.
+      # If a step failed after maintenance mode went on, decide carefully
+      # whether to reopen. Lifting maintenance after an incomplete sync serves
+      # a half-deployed application, which is worse than a controlled outage:
+      # that is exactly what happened when rsync exited 23 on directory times
+      # and the site came back up with both migrations still pending.
       - name: Recover from failed deploy
         if: ${{ failure() && !inputs.dry_run }}
+        env:
+          APP_PATH: ${{ secrets.CLOUDWAYS_APP_PATH }}
         run: |
-          echo "::warning::Deploy failed — attempting to lift maintenance mode"
-          ssh cloudways "cd '${{ secrets.CLOUDWAYS_APP_PATH }}' && php artisan up" || true
+          if [ "${{ steps.sync.outcome }}" = "success" ]; then
+            echo "::warning::Deploy failed after the files synced. Lifting maintenance mode."
+            echo "Files are current but migrations/caches may not have run — verify the site."
+            ssh cloudways "cd '$APP_PATH' && php artisan up" || true
+          else
+            echo "::error::The file sync did not complete. LEAVING THE SITE IN MAINTENANCE MODE."
+            echo "Reopening now would serve a partially deployed application."
+            echo "Investigate, then either re-run this workflow or lift it manually with:"
+            echo "  ssh <user>@<host> \"cd <app_path> && php artisan up\""
+          fi
 
       - name: Clean up SSH key
         if: always()
