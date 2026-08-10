@@ -131,14 +131,45 @@ jobs:
             IdentitiesOnly yes
             StrictHostKeyChecking yes
             ServerAliveInterval 30
+            # Fail immediately on a rejected key instead of falling back to an
+            # interactive password prompt, which only produces a confusing
+            # "Permission denied, please try again." in a non-interactive job.
+            PreferredAuthentications publickey
+            PasswordAuthentication no
+            BatchMode yes
           SSHCONF
           chmod 600 ~/.ssh/config
 
       - name: Verify connection and app path
+        env:
+          APP_PATH: ${{ secrets.CLOUDWAYS_APP_PATH }}
         run: |
           set -euo pipefail
-          ssh cloudways "test -f '${{ secrets.CLOUDWAYS_APP_PATH }}/artisan'" \
-            || { echo "::error::No artisan found at CLOUDWAYS_APP_PATH — check the path"; exit 1; }
+
+          # Check authentication on its own first. Folding this into the
+          # artisan test made an auth failure report itself as a bad path.
+          if ! ssh cloudways 'echo ok' >/dev/null 2>&1; then
+            echo "::error::SSH authentication to Cloudways failed (publickey rejected)."
+            echo "The host was reachable — its key was scanned in the previous step —"
+            echo "so this is authentication, not networking. Check, in order:"
+            echo "  1. The PUBLIC half of CLOUDWAYS_SSH_KEY is installed on Cloudways."
+            echo "     Server Management > SSH Public Keys, or the application's own key."
+            echo "  2. CLOUDWAYS_USER matches the user that key belongs to."
+            echo "     Master and application users are different accounts."
+            echo "  3. CLOUDWAYS_SSH_KEY holds the PRIVATE key, including its"
+            echo "     BEGIN/END lines and a trailing newline."
+            exit 1
+          fi
+          echo "SSH authentication OK."
+
+          if ! ssh cloudways "test -f '$APP_PATH/artisan'"; then
+            echo "::error::Connected, but no artisan file at CLOUDWAYS_APP_PATH."
+            echo "Directory listing one level up, to help locate the app root:"
+            ssh cloudways "ls -la \"\$(dirname '$APP_PATH')\"" || true
+            exit 1
+          fi
+          echo "Found artisan at $APP_PATH."
+
           echo "Remote PHP: $(ssh cloudways 'php -v | head -1')"
           ssh cloudways "command -v rsync >/dev/null" \
             || { echo "::error::rsync is not installed on the server"; exit 1; }
