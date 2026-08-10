@@ -12,8 +12,10 @@ name: Deploy to Cloudways
 #   CLOUDWAYS_APP_PATH   absolute app root, e.g.
 #                        /home/master/applications/abcdefghij/public_html
 #
-# Optional repository variable:
-#   PRODUCTION_URL       https://docs.example.com — enables the health check
+# Optional secret:
+#   PRODUCTION_URL       https://docs.example.com — enables the health check.
+#                        Held as a secret, so GitHub masks it as *** in the
+#                        job log; that is cosmetic only.
 
 on:
   workflow_dispatch:
@@ -222,11 +224,11 @@ jobs:
       # ------------------------------------------------------------- verify
 
       - name: Health check
-        if: ${{ !inputs.dry_run && vars.PRODUCTION_URL != '' }}
+        if: ${{ !inputs.dry_run && secrets.PRODUCTION_URL != '' }}
         run: |
           set -euo pipefail
           for attempt in 1 2 3 4 5; do
-            code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 20 "${{ vars.PRODUCTION_URL }}/login" || echo 000)
+            code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 20 "${{ secrets.PRODUCTION_URL }}/login" || echo 000)
             echo "Attempt $attempt: HTTP $code"
             if [ "$code" = "200" ]; then
               echo "Site is up."
