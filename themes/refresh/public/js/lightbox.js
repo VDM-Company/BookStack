@@ -332,24 +332,39 @@
     }
 
     /**
-     * Hide the page behind the overlay without letting it jump sideways when
-     * the scrollbar disappears.
+     * Freeze the page behind the overlay, without losing the reader's place
+     * and without letting the layout jump sideways.
+     *
+     * This locks <html>, not <body>, and that distinction is the whole point.
+     * Core gives body `height: 100%` inside an html that owns the scrollbar
+     * (resources/sass/_html.scss), so body is a viewport-height box whose
+     * content overflows it. Setting `overflow: hidden` on body therefore
+     * CLIPS that content away: the document's scrollable height collapses to
+     * one viewport, the scroll offset has nowhere to live, and the reader is
+     * thrown back to the top of the page — restoring overflow afterwards
+     * brings the height back but not the position.
+     *
+     * html is the element that actually scrolls, and hiding its overflow
+     * suspends scrolling without changing the layout, so the offset survives.
      */
     function lockScroll() {
-        var body = document.body;
-        var gap = window.innerWidth - document.documentElement.clientWidth;
-        state.prevOverflow = body.style.overflow;
-        state.prevPadding = body.style.paddingRight;
-        body.style.overflow = 'hidden';
+        var root = document.documentElement;
+        // Core reserves the gutter with `overflow-y: scroll`, so this is the
+        // scrollbar width on platforms that take up space (0 with macOS
+        // overlay scrollbars), and hiding overflow would otherwise reclaim it.
+        var gap = window.innerWidth - root.clientWidth;
+        state.prevOverflow = root.style.overflow;
+        state.prevPadding = root.style.paddingRight;
+        root.style.overflow = 'hidden';
         if (gap > 0) {
-            var current = parseInt(window.getComputedStyle(body).paddingRight, 10) || 0;
-            body.style.paddingRight = (current + gap) + 'px';
+            var current = parseInt(window.getComputedStyle(root).paddingRight, 10) || 0;
+            root.style.paddingRight = (current + gap) + 'px';
         }
     }
 
     function unlockScroll() {
-        document.body.style.overflow = state.prevOverflow;
-        document.body.style.paddingRight = state.prevPadding;
+        document.documentElement.style.overflow = state.prevOverflow;
+        document.documentElement.style.paddingRight = state.prevPadding;
     }
 
     /**
