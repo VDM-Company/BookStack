@@ -1,0 +1,494 @@
+@use "tools" as *;
+
+/**
+ * Wide tables in page content.
+ *
+ * Core constrains every content table with `table-layout: fixed` and
+ * `max-width: 100%` inside an 840px content column (resources/sass/_content.scss:49),
+ * and breaks cell text at any character (resources/sass/_tables.scss:13). The
+ * combination means a content table can never overflow — it is squeezed instead,
+ * and a table with more columns than the column has room for ends up a character
+ * or two per line.
+ *
+ * `wide-tables.js` wraps every content table in `.rt-scroll` and measures it.
+ * Only a table that needs more room than it has keeps `rt-wide`, so everything
+ * below the "unclamped table" heading applies to tables that were unreadable
+ * anyway. A table that fits is left on core's rendering exactly.
+ *
+ * Everything the module creates is prefixed `rt-`, so every rule here is
+ * scoped to an element the script made. Core declarations are answered only
+ * inside those scopes — each one commented where it appears — and none of the
+ * answered declarations come from core's lightDark() mixin, so the wrinkle
+ * documented in _tools.scss does not arise.
+ */
+
+.rt-wrap {
+  position: relative;
+  /* Height of the strip the expand button sits in. Zero until the script says
+     the table overflows, so a table that fits takes no extra space. */
+  --rt-bar: 0px;
+  padding-top: var(--rt-bar);
+  /* Core spaces block content with `p, ul, ol, pre, table, blockquote`
+     margins (resources/sass/_text.scss:131). Those are moved out to the
+     wrapper: a scroll container is a new block formatting context, so a margin
+     left on the table inside it would stop collapsing with the neighbouring
+     paragraph's and show up as a wider gap than before the table was wrapped. */
+  margin-top: 0.3em;
+  margin-bottom: 1.375em;
+}
+
+.rt-wrap > .rt-scroll > table {
+  margin-top: 0;
+  margin-bottom: 0;
+}
+
+.rt-scroll {
+  overflow: auto;
+  /* A flick that reaches the end of the table should stop there rather than
+     carry on into the page behind it. */
+  overscroll-behavior-x: contain;
+}
+
+/* The script makes an overflowing scroll box focusable so it can be scrolled
+   from the keyboard; give that focus somewhere to land. */
+.rt-scroll:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring);
+  outline-offset: var(--focus-ring-offset);
+}
+
+/**
+ * The unclamped table.
+ *
+ * Removing `table-layout: fixed` lets the browser size columns from their
+ * contents, and removing the clamp lets the table grow past the content column
+ * when its columns genuinely cannot fit inside it. Nothing forces it wider:
+ * auto layout still fits the table into the column whenever it can, so a
+ * prose-heavy table wraps as before instead of running off to max-content.
+ *
+ * Each declaration is one step more specific than the core rule it answers
+ * (`.page-content table` and `table td, table th`), so no !important is needed.
+ */
+.rt-scroll > table.rt-wide {
+  table-layout: auto;
+  max-width: none;
+  /* Core hyphenates content tables, which is a device for fitting text into a
+     measure narrower than it wants. This table has stopped doing that, so
+     hyphenation now only buys a few pixels in exchange for `mar-gin` down a
+     column heading. */
+  hyphens: manual;
+}
+
+/* A caption is centred over the table by browser default, which on a table
+   several times wider than the column puts it off-screen until the reader
+   scrolls. Anchor it to the leading edge, where it is visible at rest. */
+.rt-scroll > table.rt-wide > caption {
+  text-align: start;
+}
+
+.rt-scroll > table.rt-wide th,
+.rt-scroll > table.rt-wide td {
+  /* Core's `word-break: break-word` drops a cell's minimum width to a single
+     character. Under auto layout that would let the browser keep compressing
+     for ever and the table would never be measured as needing more room.
+     `overflow-wrap` still breaks an over-long URL that cannot fit its line,
+     but stops a column from claiming it can survive on one letter. */
+  word-break: normal;
+  overflow-wrap: break-word;
+}
+
+/**
+ * The same unclamping inside the WYSIWYG editor.
+ *
+ * `wide-tables.js` adds this stylesheet to TinyMCE's `content_css` and marks
+ * the tables that need the room with `data-refresh-wide`, so the rules live
+ * here with the rest rather than being duplicated in the script. The editor
+ * body carries `page-content`, so the same core clamps apply in there and the
+ * same one-step-more-specific selectors answer them.
+ *
+ * Nothing is wrapped in the editor — a wrapper inside contenteditable would be
+ * theme markup in the author's saved HTML — so there is no scroll container
+ * here and no expand button. The editor body scrolls instead.
+ *
+ * In the reader nothing ever carries this attribute, so this block is inert
+ * there; the marker is stripped from everything the editor serialises, so it
+ * never reaches stored content either.
+ */
+.page-content table[data-refresh-wide] {
+  table-layout: auto;
+  max-width: none;
+  hyphens: manual;
+}
+
+.page-content table[data-refresh-wide] > caption {
+  text-align: start;
+}
+
+.page-content table[data-refresh-wide] th,
+.page-content table[data-refresh-wide] td {
+  word-break: normal;
+  overflow-wrap: break-word;
+}
+
+/**
+ * Edge fades.
+ *
+ * A translucent shadow rather than a fade to the page colour, because content
+ * tables also appear inside callouts and details blocks, where a fade matched
+ * to the card background would show as a pale smear. A shadow reads as
+ * "continues underneath" on any background.
+ */
+.rt-wrap::before,
+.rt-wrap::after {
+  content: '';
+  position: absolute;
+  top: var(--rt-bar);
+  bottom: 0;
+  width: 2rem;
+  z-index: 1;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--dur-fast) var(--ease-out);
+}
+
+.rt-wrap::before {
+  inset-inline-start: 0;
+  background-image: linear-gradient(to right, rgba(20, 26, 38, 0.14), rgba(20, 26, 38, 0));
+}
+
+.rt-wrap::after {
+  inset-inline-end: 0;
+  background-image: linear-gradient(to left, rgba(20, 26, 38, 0.14), rgba(20, 26, 38, 0));
+}
+
+html.dark-mode .rt-wrap::before {
+  background-image: linear-gradient(to right, rgba(0, 0, 0, 0.5), rgba(0, 0, 0, 0));
+}
+
+html.dark-mode .rt-wrap::after {
+  background-image: linear-gradient(to left, rgba(0, 0, 0, 0.5), rgba(0, 0, 0, 0));
+}
+
+/* The gradients are the one thing here that cannot be expressed in logical
+   directions, so a right-to-left document mirrors them instead. */
+html[dir="rtl"] .rt-wrap::before,
+html[dir="rtl"] .rt-wrap::after {
+  transform: scaleX(-1);
+}
+
+.rt-wrap.rt-more-start::before,
+.rt-wrap.rt-more-end::after {
+  opacity: 1;
+}
+
+/* The expand button. Sits in its own strip above the table rather than over
+   it, so it never covers a header cell. */
+.rt-wrap.rt-overflow {
+  --rt-bar: 1.9rem;
+}
+
+.rt-expand {
+  position: absolute;
+  top: 0;
+  inset-inline-end: 0;
+  display: none;
+  align-items: center;
+  gap: 0.3rem;
+  height: 1.6rem;
+  padding: 0 0.5rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background-color: var(--bg-surface);
+  color: var(--text-muted);
+  font-size: 0.75rem;
+  line-height: 1;
+  cursor: pointer;
+  transition: color var(--dur-fast) var(--ease-out),
+              border-color var(--dur-fast) var(--ease-out);
+}
+
+.rt-overflow > .rt-expand {
+  display: inline-flex;
+}
+
+.rt-expand svg {
+  width: 0.85em;
+  height: 0.85em;
+}
+
+.rt-expand:hover {
+  border-color: var(--border-strong);
+  color: var(--text);
+}
+
+.rt-expand:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring);
+  outline-offset: var(--focus-ring-offset);
+}
+
+/**
+ * Full-screen viewer.
+ *
+ * Below the lightbox's z-index (1000) on purpose: an image in a cell opened
+ * from here has to land on top of this, not behind it.
+ */
+.rt-fs {
+  position: fixed;
+  inset: 0;
+  z-index: 990;
+  display: flex;
+  flex-direction: column;
+  background-color: var(--bg-surface);
+  opacity: 0;
+  transition: opacity var(--dur-fast) var(--ease-out);
+}
+
+.rt-fs.rt-fs-open {
+  opacity: 1;
+}
+
+.rt-fs[hidden] {
+  display: none;
+}
+
+.rt-fs-bar {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 0.75rem;
+  border-bottom: 1px solid var(--border);
+  background-color: var(--bg-surface-alt);
+}
+
+.rt-fs-title {
+  flex: 1 1 auto;
+  min-width: 0;
+  margin: 0;
+  color: var(--text-strong);
+  font-size: 0.95rem;
+  font-weight: 600;
+  line-height: 1.3;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.rt-fs-btn {
+  flex: 0 0 auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background-color: var(--bg-surface);
+  color: var(--text-muted);
+  font-size: 0.8rem;
+  line-height: 1;
+  padding: 0.4rem 0.6rem;
+  cursor: pointer;
+  transition: color var(--dur-fast) var(--ease-out),
+              border-color var(--dur-fast) var(--ease-out);
+}
+
+.rt-fs-btn:hover {
+  border-color: var(--border-strong);
+  color: var(--text);
+}
+
+.rt-fs-btn:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring);
+  outline-offset: var(--focus-ring-offset);
+}
+
+.rt-fs-freeze[aria-pressed="true"] {
+  border-color: var(--color-primary);
+  color: var(--color-primary);
+}
+
+.rt-fs-close {
+  width: 2rem;
+  padding: 0;
+  font-size: 1.25rem;
+}
+
+/**
+ * No horizontal padding, deliberately.
+ *
+ * A frozen first column sticks to the scrollport's content edge, so any
+ * inline padding here becomes a strip the frozen cells do not cover and the
+ * columns sliding underneath show through it. The table sits flush to the
+ * viewport instead, which is what a full-screen table wants anyway.
+ */
+.rt-fs-body {
+  flex: 1 1 auto;
+  overflow: auto;
+  padding: 0 0 1rem;
+  overscroll-behavior: contain;
+}
+
+.rt-fs-body:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring);
+  outline-offset: calc(var(--focus-ring-offset) * -1);
+}
+
+/* The viewer body carries core's `page-content` class so the copied table
+   inherits the typography it was authored against and images inside it still
+   reach the lightbox. Undo the parts of that class that only make sense in a
+   reading column. */
+.rt-fs .rt-fs-body {
+  width: auto;
+  max-width: none;
+  margin: 0;
+}
+
+.rt-fs .rt-fs-body table {
+  table-layout: auto;
+  max-width: none;
+  margin: 0;
+  hyphens: manual;
+}
+
+/* The title bar prefers the table's caption, so showing the caption again over
+   the copy would print the same line twice. Nothing is lost by hiding it: a
+   table with no caption never had one to hide, and its title came from the
+   heading above it instead. */
+.rt-fs .rt-fs-body caption {
+  display: none;
+}
+
+.rt-fs .rt-fs-body th,
+.rt-fs .rt-fs-body td {
+  word-break: normal;
+  overflow-wrap: break-word;
+  /* Core gives cells `overflow: auto` (resources/sass/_tables.scss:11). That
+     clips the frozen column's backdrop below back to the cell's padding box,
+     which leaves the collapsed border strip at its leading edge uncovered and
+     showing whatever is scrolling underneath. */
+  overflow: visible;
+}
+
+/**
+ * Sticky header row.
+ *
+ * Matched two ways because BookStack content tables often have no thead at
+ * all — core has the same pair of selectors for the same reason
+ * (resources/sass/_tables.scss:25).
+ *
+ * The underline is a pseudo-element, not a border and not a shadow. A sticky
+ * cell's own borders scroll away with the rows they were collapsed into, and
+ * `box-shadow` is not an option either: the editor writes
+ * `border-collapse: collapse` onto tables inline, and Chrome does not paint
+ * shadows on the cells of a collapsed-border table at all.
+ */
+.rt-fs-body thead > tr > th,
+.rt-fs-body thead > tr > td,
+.rt-fs-body table:not(:has(thead)) > tbody > tr:first-child > th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background-color: var(--bg-surface-alt);
+}
+
+.rt-fs-body thead > tr > th::after,
+.rt-fs-body thead > tr > td::after,
+.rt-fs-body table:not(:has(thead)) > tbody > tr:first-child > th::after {
+  content: '';
+  position: absolute;
+  inset-inline: 0;
+  bottom: 0;
+  height: 1px;
+  background-color: var(--border);
+  pointer-events: none;
+}
+
+/* Frozen first column, toggled from the viewer's own button. */
+.rt-fs-frozen .rt-fs-body tr > :first-child {
+  position: sticky;
+  inset-inline-start: 0;
+  z-index: 1;
+  background-color: var(--bg-surface);
+}
+
+/**
+ * The frozen column's own backdrop and seam.
+ *
+ * It has to overhang the leading edge because a collapsed border belongs to
+ * the table rather than to either cell: the cell's background stops a pixel or
+ * so short of where the column visually begins, and the rows sliding
+ * underneath show through that strip. Four pixels covers it at any device
+ * pixel ratio and the overhang is clipped by the scrollport.
+ *
+ * `z-index: -1` keeps it behind the cell's own text while staying inside the
+ * sticky cell's stacking context, which is what puts it above the columns
+ * passing underneath. `inherit` picks up whichever fill the cell was given, so
+ * one rule serves both the body cells and the header cell.
+ */
+.rt-fs-frozen .rt-fs-body tr > :first-child::before {
+  content: '';
+  position: absolute;
+  top: -1px;
+  bottom: -1px;
+  inset-inline-start: -4px;
+  inset-inline-end: 0;
+  z-index: -1;
+  background-color: inherit;
+  border-inline-end: 1px solid var(--border);
+  pointer-events: none;
+}
+
+/* Where the frozen column crosses the sticky header, the header wins. */
+.rt-fs-frozen .rt-fs-body thead > tr > :first-child,
+.rt-fs-frozen .rt-fs-body tr:first-child > th:first-child {
+  z-index: 3;
+  background-color: var(--bg-surface-alt);
+}
+
+@include smaller-than($bp-s) {
+  .rt-fs-body {
+    padding-bottom: 0.5rem;
+  }
+
+  .rt-fs-bar {
+    padding: 0.4rem 0.5rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rt-wrap::before,
+  .rt-wrap::after,
+  .rt-expand,
+  .rt-fs,
+  .rt-fs-btn {
+    transition: none;
+  }
+}
+
+/**
+ * Print.
+ *
+ * Paper has no scrollbar, so an overflowing table has to go back to core's
+ * behaviour of fitting the page whatever that costs in legibility. The viewer
+ * is hidden rather than closed: it holds a copy, so the real table is still in
+ * the flow of the page being printed.
+ */
+@media print {
+  .rt-scroll {
+    overflow: visible;
+  }
+
+  .rt-scroll > table.rt-wide {
+    table-layout: fixed;
+    max-width: 100%;
+  }
+
+  .rt-wrap {
+    --rt-bar: 0px;
+  }
+
+  .rt-wrap::before,
+  .rt-wrap::after,
+  .rt-expand {
+    display: none;
+  }
+
+  .rt-fs {
+    display: none !important;
+  }
+}
