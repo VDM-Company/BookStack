@@ -17,7 +17,17 @@ name: Deploy to Cloudways
 #                        Held as a secret, so GitHub masks it as *** in the
 #                        job log; that is cosmetic only.
 
+# Runs automatically on every push to release-custom, and can still be started
+# by hand for a dry run or to skip migrations.
+#
+# An automatic run is a REAL deploy: it is never a dry run, and it always
+# migrates. There is no checkbox to forget, which is the point — but it also
+# means anything pushed to release-custom reaches production. Push to a feature
+# branch and merge when ready, rather than pushing here to "see if it works".
 on:
+  push:
+    branches:
+      - release-custom
   workflow_dispatch:
     inputs:
       dry_run:
@@ -48,6 +58,26 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     environment: production
+
+    # The two deploy switches, resolved once here so no step has to know which
+    # event started the run.
+    #
+    # `inputs` does not exist on a push event, so reading inputs.* directly in
+    # the steps would yield an empty string there. That is quietly dangerous
+    # for run_migrations: the remote script compares it against "true", so
+    # every automatic deploy would have shipped new code and skipped its
+    # migrations.
+    #
+    # Written as explicit comparisons rather than the usual
+    # `cond && inputs.x || default` idiom, which returns the default whenever
+    # the middle operand is false — that would force migrations back on even
+    # when the operator deliberately unticked the box.
+    #
+    # Both resolve to the strings "true"/"false", which is what the step
+    # conditions and the shell comparisons below expect.
+    env:
+      DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run == true }}
+      RUN_MIGRATIONS: ${{ github.event_name != 'workflow_dispatch' || inputs.run_migrations == true }}
 
     steps:
       - name: Checkout
@@ -207,7 +237,7 @@ jobs:
       # -------------------------------------------------------------- deploy
 
       - name: Enable maintenance mode
-        if: ${{ !inputs.dry_run }}
+        if: ${{ env.DRY_RUN != 'true' }}
         run: |
           ssh cloudways "cd '${{ secrets.CLOUDWAYS_APP_PATH }}' && php artisan down --retry=60" || true
 
@@ -246,7 +276,6 @@ jobs:
         # dev/licensing/*.txt at runtime to render the /licenses page.
         env:
           APP_PATH: ${{ secrets.CLOUDWAYS_APP_PATH }}
-          DRY_RUN: ${{ inputs.dry_run }}
         run: |
           set -euo pipefail
 
@@ -324,9 +353,8 @@ jobs:
           fi
 
       - name: Migrate and refresh caches
-        if: ${{ !inputs.dry_run }}
+        if: ${{ env.DRY_RUN != 'true' }}
         env:
-          RUN_MIGRATIONS: ${{ inputs.run_migrations }}
           APP_PATH: ${{ secrets.CLOUDWAYS_APP_PATH }}
         run: |
           set -euo pipefail
@@ -351,14 +379,14 @@ jobs:
           REMOTE
 
       - name: Disable maintenance mode
-        if: ${{ !inputs.dry_run }}
+        if: ${{ env.DRY_RUN != 'true' }}
         run: |
           ssh cloudways "cd '${{ secrets.CLOUDWAYS_APP_PATH }}' && php artisan up"
 
       # ------------------------------------------------------------- verify
 
       - name: Health check
-        if: ${{ !inputs.dry_run }}
+        if: ${{ env.DRY_RUN != 'true' }}
         env:
           # The `secrets` context is not available in `if:` conditions, so the
           # "is it configured?" test has to happen in the shell instead.
@@ -391,7 +419,7 @@ jobs:
       # that is exactly what happened when rsync exited 23 on directory times
       # and the site came back up with both migrations still pending.
       - name: Recover from failed deploy
-        if: ${{ failure() && !inputs.dry_run }}
+        if: ${{ failure() && env.DRY_RUN != 'true' }}
         env:
           APP_PATH: ${{ secrets.CLOUDWAYS_APP_PATH }}
         run: |
