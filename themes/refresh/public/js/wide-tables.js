@@ -531,38 +531,49 @@
      */
 
     var EDITOR_MARK = 'data-refresh-wide';
-    var EDITOR_STYLE_ID = 'refresh-wide-tables';
+
+    /* Set once the theme's stylesheet has been added to the editor's
+       content_css, so the pass never marks a table it has no rules for. */
+    var editorStyled = false;
 
     /**
-     * Mirrors the "unclamped table" rules in src/_tables.scss and has to stay
-     * in step with them; the two cannot share a stylesheet because the editor
-     * iframe never loads the theme's. Both selectors are one step more
-     * specific than the core rule they answer, so neither needs !important.
+     * The theme's stylesheet, at whatever cache-busted URL this page is
+     * already using it under — taken from the document rather than rebuilt, so
+     * the editor loads the exact same file as the reader and there is no
+     * second place for the version to drift.
      */
-    var EDITOR_CSS = [
-        '.page-content table[' + EDITOR_MARK + '] {',
-        '  table-layout: auto;',
-        '  max-width: none;',
-        '  hyphens: manual;',
-        '}',
-        '.page-content table[' + EDITOR_MARK + '] > caption {',
-        '  text-align: start;',
-        '}',
-        '.page-content table[' + EDITOR_MARK + '] th,',
-        '.page-content table[' + EDITOR_MARK + '] td {',
-        '  word-break: normal;',
-        '  overflow-wrap: break-word;',
-        '}'
-    ].join('\n');
+    function themeStylesheetHref() {
+        var link = document.querySelector('link[rel="stylesheet"][href*="/css/theme.css"]');
+        return link ? link.href : null;
+    }
 
-    function editorStyles(doc) {
-        if (doc.getElementById(EDITOR_STYLE_ID)) {
+    /**
+     * Give the editor iframe the theme's stylesheet.
+     *
+     * `editor-tinymce::pre-init` hands over the TinyMCE config before init, so
+     * the sheet arrives as a normal `content_css` entry rather than something
+     * injected afterwards — no flash of unstyled content, and the editor's own
+     * lifecycle owns it. This is what makes the editor's typography match the
+     * reader's, and it also carries the unclamping rules keyed on the marker
+     * attribute, so those live in src/_tables.scss with everything else rather
+     * than being duplicated in this file.
+     *
+     * Dark mode comes out right because core adds `dark-mode` to the iframe's
+     * own documentElement (wysiwyg-tinymce/config.js), which is exactly what
+     * the theme's `:root.dark-mode` token block keys on.
+     */
+    function addThemeStylesheet(config) {
+        var href = themeStylesheetHref();
+        if (!href || !config) {
             return;
         }
-        var style = doc.createElement('style');
-        style.id = EDITOR_STYLE_ID;
-        style.textContent = EDITOR_CSS;
-        doc.head.appendChild(style);
+        if (!Array.isArray(config.content_css)) {
+            config.content_css = config.content_css ? [config.content_css] : [];
+        }
+        if (config.content_css.indexOf(href) === -1) {
+            config.content_css.push(href);
+        }
+        editorStyled = true;
     }
 
     /**
@@ -630,11 +641,18 @@
         /* Inside PreInit, not here: the serializer and parser do not exist
            until then, and reaching for them during setup would throw. Core
            registers its own filters from the same event for the same reason
-           (wysiwyg-tinymce/config.js). */
+           (wysiwyg-tinymce/config.js).
+
+           Registered even when the stylesheet is missing, so a marker left in
+           content by an earlier session is still cleaned up. */
         editor.on('PreInit', guard(function () {
             editor.serializer.addAttributeFilter(EDITOR_MARK, stripMark);
             editor.parser.addAttributeFilter(EDITOR_MARK, stripMark);
         }));
+
+        if (!editorStyled) {
+            return;
+        }
 
         /**
          * Coalesced on a timer rather than an animation frame.
@@ -661,9 +679,6 @@
         };
 
         editor.on('init', guard(function () {
-            editorStyles(editor.getDoc());
-            // Synchronous, for the same reason the reader's first pass is:
-            // an editor opened in a background tab runs no animation frames.
             evaluateEditor(editor.getBody());
         }));
 
@@ -735,8 +750,13 @@
     }
 
     /* Registered outside init() and immediately: the script is deferred, so it
-       runs before the editor is built, and an edit screen has no reader
-       tables for init() to find. The event bubbles to the document. */
+       runs before the editor is built, and an edit screen has no reader tables
+       for init() to find. Both events bubble to the document. pre-init fires
+       first and settles the stylesheet; setup follows with the instance. */
+    document.addEventListener('editor-tinymce::pre-init', guard(function (event) {
+        addThemeStylesheet(event.detail && event.detail.config);
+    }));
+
     document.addEventListener('editor-tinymce::setup', guard(function (event) {
         var editor = event.detail && event.detail.editor;
         if (editor) {

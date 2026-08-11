@@ -17,7 +17,8 @@ Then `php artisan config:clear`. No build step — the compiled CSS is committed
 
 - **Typography** — self-hosted Geist / Geist Mono variable fonts. Headings move
   from weight 400 with no tracking to 600 with optical negative tracking and
-  tighter leading.
+  tighter leading. The WYSIWYG editor gets the same stylesheet, so page content
+  is set in the same typeface at the same weights while it is being written.
 - **Surfaces** — one cool-tinted neutral ramp replacing core's mix of warm and
   cool greys, tinted elevation, softer radii, an off-black dark mode.
 - **Interaction** — buttons lift on hover and press on click; focus rings move
@@ -142,32 +143,41 @@ body carries core's `page-content` class so the copy keeps the typography it
 was authored against and images inside it still reach the lightbox; the
 stylesheet undoes that class's 840px cap for this one context.
 
-**6. A second, lighter pass inside the WYSIWYG editor.** The crushing happens
-while authoring too, and none of the above reaches it: TinyMCE runs in an
-iframe whose only stylesheets are core's, and this script does not run in that
-document. Core emits `editor-tinymce::setup` as a bubbling public event
-carrying the editor instance, which is the supported way in.
+**6. The theme's stylesheet inside the WYSIWYG editor, plus a lighter pass over
+its tables.** TinyMCE runs in an iframe, and core gives it only its own
+stylesheet — so the editor rendered page content in the system typeface at
+core's heading weights while the reader rendered it in Geist at the theme's,
+and content tables were crushed in there exactly as they used to be in the
+reader. What you authored was not what you published.
+
+`wide-tables.js` listens for two bubbling public events core emits.
+`editor-tinymce::pre-init` hands over the TinyMCE config before init, and the
+theme's stylesheet is appended to its `content_css` — taken from the `<link>`
+already on the page, so the editor loads the exact same cache-busted file as
+the reader and there is no second place for the version to drift. Dark mode
+comes out right because core adds `dark-mode` to the iframe's own
+documentElement, which is what the theme's `:root.dark-mode` block keys on.
+`editor-tinymce::setup` then hands over the editor instance for the table pass.
 
 Nothing is wrapped in there. A wrapper inside `contenteditable` would be theme
 markup in the HTML the author is about to save, and would put a block boundary
-between the caret and the table. The editor pass sets an attribute and nothing
-else, injects a small stylesheet keyed on that attribute into the editor
-document, and registers serializer and parser filters that strip the attribute
-from everything the editor hands back and off anything it is given — the same
-mechanism core uses to keep its own stray markup out of saved content, in
+between the caret and the table. The pass sets one attribute, `data-refresh-wide`,
+which `src/_tables.scss` keys the unclamping on — so those rules live with the
+rest of the theme's rather than being duplicated in the script — and registers
+serializer and parser filters that strip the attribute from everything the
+editor hands back and off anything it is given. That is the same mechanism core
+uses to keep its own stray markup out of saved content, in
 `wysiwyg-tinymce/filters.js`. Saving, draft autosave and the changelog preview
-all serialise through that filter, so stored HTML never sees it.
+all serialise through it, so stored HTML never sees the attribute.
 
-Two consequences worth knowing. Sideways scrolling in the editor comes from the
+One consequence worth knowing: sideways scrolling in the editor comes from the
 editor's own body, which core already gives `overflow-x: auto`, so it moves the
-whole document rather than the one table — the price of leaving the editable
-tree alone. And the stylesheet in `wide-tables.js` duplicates the "unclamped
-table" rules from `src/_tables.scss`; the two cannot share a stylesheet because
-the editor iframe never loads the theme's, so they have to be kept in step by
-hand.
+whole document rather than the one table. That is the price of leaving the
+editable tree alone, and there is no expand button in there for the same
+reason.
 
 If the script fails to load, every table renders as stock BookStack, in the
-editor as well as the reader.
+editor as well as the reader, and the editor falls back to core's typography.
 
 ## Upgrading BookStack
 
@@ -196,12 +206,15 @@ Core is untouched, so upgrade normally. Two things to check afterwards:
    re-check `src/_tables.scss` — the overrides become dead weight rather than
    breakage, but the measurement assumes core is still clamping.
 
-   Its editor half additionally depends on the `editor-tinymce::setup` public
-   event, on the editor body carrying `page-content`, and on
-   `editor.serializer` / `editor.parser` existing by `PreInit`. If the event
-   were renamed the editor pass would simply never run and authoring would
-   revert to stock. The filters are the part to check deliberately after an
-   upgrade: they are what keeps the marker attribute out of saved content.
+   Its editor half additionally depends on the `editor-tinymce::pre-init` and
+   `editor-tinymce::setup` public events, on `content_css` accepting an extra
+   entry, on the editor body carrying `page-content`, on core adding
+   `dark-mode` to the iframe's documentElement, and on `editor.serializer` /
+   `editor.parser` existing by `PreInit`. If either event were renamed the
+   editor pass would simply never run and authoring would revert to core's
+   typography and core's crushed tables. The filters are the part to check
+   deliberately after an upgrade: they are what keeps the marker attribute out
+   of saved content.
 
 Everything else — `theme.css`, `theme.js`, `lightbox.js`, `wide-tables.js`,
 `functions.php`, `lang/` — is additive and cannot conflict.
