@@ -34,7 +34,9 @@ Then `php artisan config:clear`. No build step — the compiled CSS is committed
   can hold scrolls sideways instead of being squeezed into it, and offers a
   full-screen view with a sticky header row and an optional frozen first
   column. Only tables measured as needing the room are affected; a table that
-  fits renders exactly as stock. See below for what "needs the room" means.
+  fits renders exactly as stock. The same tables get the same widths in the
+  WYSIWYG editor, so what is authored matches what is published. See below for
+  what "needs the room" means.
 
 ## How it works
 
@@ -48,12 +50,12 @@ themes/refresh/
 │   ├── css/theme.css                   compiled, committed
 │   ├── js/theme.js                     two DOM hooks core doesn't emit
 │   ├── js/lightbox.js                  image lightbox
-│   ├── js/wide-tables.js               scroll + full screen for wide tables
+│   ├── js/wide-tables.js               wide tables: reader + editor
 │   └── fonts/                          Geist + Geist Mono (SIL OFL)
 └── src/                                stylesheet source
 ```
 
-Five mechanisms do the work:
+Six mechanisms do the work:
 
 **1. A stylesheet loaded after core's.** `custom-head.blade.php` links
 `theme.css`, which lands after `dist/styles.css` in `<head>`. Overrides at
@@ -140,7 +142,32 @@ body carries core's `page-content` class so the copy keeps the typography it
 was authored against and images inside it still reach the lightbox; the
 stylesheet undoes that class's 840px cap for this one context.
 
-If the script fails to load, every table renders as stock BookStack.
+**6. A second, lighter pass inside the WYSIWYG editor.** The crushing happens
+while authoring too, and none of the above reaches it: TinyMCE runs in an
+iframe whose only stylesheets are core's, and this script does not run in that
+document. Core emits `editor-tinymce::setup` as a bubbling public event
+carrying the editor instance, which is the supported way in.
+
+Nothing is wrapped in there. A wrapper inside `contenteditable` would be theme
+markup in the HTML the author is about to save, and would put a block boundary
+between the caret and the table. The editor pass sets an attribute and nothing
+else, injects a small stylesheet keyed on that attribute into the editor
+document, and registers serializer and parser filters that strip the attribute
+from everything the editor hands back and off anything it is given — the same
+mechanism core uses to keep its own stray markup out of saved content, in
+`wysiwyg-tinymce/filters.js`. Saving, draft autosave and the changelog preview
+all serialise through that filter, so stored HTML never sees it.
+
+Two consequences worth knowing. Sideways scrolling in the editor comes from the
+editor's own body, which core already gives `overflow-x: auto`, so it moves the
+whole document rather than the one table — the price of leaving the editable
+tree alone. And the stylesheet in `wide-tables.js` duplicates the "unclamped
+table" rules from `src/_tables.scss`; the two cannot share a stylesheet because
+the editor iframe never loads the theme's, so they have to be kept in step by
+hand.
+
+If the script fails to load, every table renders as stock BookStack, in the
+editor as well as the reader.
 
 ## Upgrading BookStack
 
@@ -168,6 +195,13 @@ Core is untouched, so upgrade normally. Two things to check afterwards:
    (`resources/sass/_tables.scss`). If a release drops or moves any of those,
    re-check `src/_tables.scss` — the overrides become dead weight rather than
    breakage, but the measurement assumes core is still clamping.
+
+   Its editor half additionally depends on the `editor-tinymce::setup` public
+   event, on the editor body carrying `page-content`, and on
+   `editor.serializer` / `editor.parser` existing by `PreInit`. If the event
+   were renamed the editor pass would simply never run and authoring would
+   revert to stock. The filters are the part to check deliberately after an
+   upgrade: they are what keeps the marker attribute out of saved content.
 
 Everything else — `theme.css`, `theme.js`, `lightbox.js`, `wide-tables.js`,
 `functions.php`, `lang/` — is additive and cannot conflict.

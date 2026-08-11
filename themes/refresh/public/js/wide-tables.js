@@ -505,6 +505,176 @@
     }
 
     /* ------------------------------------------------------------------ *
+     * The WYSIWYG editor
+     * ------------------------------------------------------------------ */
+
+    /**
+     * The same crushing happens while authoring, and nothing above reaches it.
+     *
+     * TinyMCE runs in an iframe whose only stylesheets are core's — config.js
+     * sets `content_css` to dist/styles.css and gives the editor body the
+     * `page-content` class — so the clamps apply in there but the theme's
+     * answer to them does not, and this script does not run in that document
+     * at all. Core emits `editor-tinymce::setup` as a bubbling public event
+     * carrying the editor instance, which is the supported way in.
+     *
+     * Unlike the reader, nothing here is wrapped. A wrapper inside
+     * contenteditable would be theme markup in the HTML the author is about to
+     * save, and would put a block boundary between the caret and the table.
+     * The only mutation is an attribute, and that attribute is filtered out of
+     * the editor's output and back off anything it parses.
+     *
+     * Sideways scrolling therefore comes from the editor's own body, which
+     * core already gives `overflow-x: auto`. That scrolls the whole document
+     * rather than the one table — the price of leaving the editable tree
+     * alone, and cheap next to the risk of not doing so.
+     */
+
+    var EDITOR_MARK = 'data-refresh-wide';
+    var EDITOR_STYLE_ID = 'refresh-wide-tables';
+
+    /**
+     * Mirrors the "unclamped table" rules in src/_tables.scss and has to stay
+     * in step with them; the two cannot share a stylesheet because the editor
+     * iframe never loads the theme's. Both selectors are one step more
+     * specific than the core rule they answer, so neither needs !important.
+     */
+    var EDITOR_CSS = [
+        '.page-content table[' + EDITOR_MARK + '] {',
+        '  table-layout: auto;',
+        '  max-width: none;',
+        '  hyphens: manual;',
+        '}',
+        '.page-content table[' + EDITOR_MARK + '] > caption {',
+        '  text-align: start;',
+        '}',
+        '.page-content table[' + EDITOR_MARK + '] th,',
+        '.page-content table[' + EDITOR_MARK + '] td {',
+        '  word-break: normal;',
+        '  overflow-wrap: break-word;',
+        '}'
+    ].join('\n');
+
+    function editorStyles(doc) {
+        if (doc.getElementById(EDITOR_STYLE_ID)) {
+            return;
+        }
+        var style = doc.createElement('style');
+        style.id = EDITOR_STYLE_ID;
+        style.textContent = EDITOR_CSS;
+        doc.head.appendChild(style);
+    }
+
+    /**
+     * The width a table has to work with, which is the content box of whatever
+     * contains it — the editor body is padded, so its clientWidth is not it.
+     */
+    function availableWidth(node) {
+        var styles = node.ownerDocument.defaultView.getComputedStyle(node);
+        return node.clientWidth
+            - (parseFloat(styles.paddingLeft) || 0)
+            - (parseFloat(styles.paddingRight) || 0);
+    }
+
+    /**
+     * Same measure-then-decide as the reader, so a table looks the same being
+     * edited as it will once saved. Marking every candidate before measuring
+     * keeps it to one layout flush however many tables the page has.
+     */
+    function evaluateEditor(body) {
+        var candidates = [];
+        var tables = body.querySelectorAll('table');
+        for (var i = 0; i < tables.length; i++) {
+            var table = tables[i];
+            // Floated and nested tables are skipped for the same reasons as in
+            // the reader; see isEligible().
+            if (table.classList.contains('align-left')
+                    || table.classList.contains('align-right')
+                    || (table.parentElement && table.parentElement.closest('table'))) {
+                table.removeAttribute(EDITOR_MARK);
+                continue;
+            }
+            candidates.push(table);
+            table.setAttribute(EDITOR_MARK, '');
+        }
+        if (!candidates.length) {
+            return;
+        }
+
+        var results = candidates.map(function (table) {
+            var room = availableWidth(table.parentElement || body);
+            return room > 0 && table.getBoundingClientRect().width - room > TOLERANCE;
+        });
+
+        candidates.forEach(function (table, i) {
+            if (!results[i]) {
+                table.removeAttribute(EDITOR_MARK);
+            }
+        });
+    }
+
+    /**
+     * Keep the marker out of everything the editor hands back — saving, draft
+     * autosave and the changelog preview all serialise through here — and off
+     * anything it is given, so a marker that ever did reach stored content is
+     * cleaned up on the next load rather than compounding. Core filters its
+     * own stray markup the same way, in wysiwyg-tinymce/filters.js.
+     */
+    function stripMark(nodes) {
+        for (var i = 0; i < nodes.length; i++) {
+            nodes[i].attr(EDITOR_MARK, null);
+        }
+    }
+
+    function setupEditor(editor) {
+        /* Inside PreInit, not here: the serializer and parser do not exist
+           until then, and reaching for them during setup would throw. Core
+           registers its own filters from the same event for the same reason
+           (wysiwyg-tinymce/config.js). */
+        editor.on('PreInit', guard(function () {
+            editor.serializer.addAttributeFilter(EDITOR_MARK, stripMark);
+            editor.parser.addAttributeFilter(EDITOR_MARK, stripMark);
+        }));
+
+        /**
+         * Coalesced on a timer rather than an animation frame.
+         *
+         * The editor's events fire whether or not the tab is being rendered —
+         * TableModified arrives for every column inserted, visible or not —
+         * but requestAnimationFrame does not run in a background tab at all,
+         * so coalescing on a frame would swallow the work and leave the table
+         * measured against the shape it used to have. A timer runs either way,
+         * and still collapses a burst of edits into one pass.
+         */
+        var timer = null;
+        var run = function () {
+            if (timer !== null) {
+                return;
+            }
+            timer = window.setTimeout(guard(function () {
+                timer = null;
+                var body = editor.getBody();
+                if (body) {
+                    evaluateEditor(body);
+                }
+            }), 50);
+        };
+
+        editor.on('init', guard(function () {
+            editorStyles(editor.getDoc());
+            // Synchronous, for the same reason the reader's first pass is:
+            // an editor opened in a background tab runs no animation frames.
+            evaluateEditor(editor.getBody());
+        }));
+
+        /* SetContent covers loading and pasting; Undo and Redo restore an
+           earlier shape of the table; TableModified is emitted by core's table
+           plugin whenever a column is added, removed or resized; ResizeEditor
+           covers the pane changing width. Each can change the answer. */
+        editor.on('SetContent Undo Redo TableModified ResizeEditor', guard(run));
+    }
+
+    /* ------------------------------------------------------------------ *
      * Start-up
      * ------------------------------------------------------------------ */
 
@@ -563,6 +733,16 @@
            Later passes stay coalesced — by then there is a frame to wait for. */
         evaluateAll();
     }
+
+    /* Registered outside init() and immediately: the script is deferred, so it
+       runs before the editor is built, and an edit screen has no reader
+       tables for init() to find. The event bubbles to the document. */
+    document.addEventListener('editor-tinymce::setup', guard(function (event) {
+        var editor = event.detail && event.detail.editor;
+        if (editor) {
+            setupEditor(editor);
+        }
+    }));
 
     if (document.readyState === 'loading') {
         document.addEventListener('DOMContentLoaded', guard(init));
