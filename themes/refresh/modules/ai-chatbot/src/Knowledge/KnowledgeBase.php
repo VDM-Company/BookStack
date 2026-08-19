@@ -24,6 +24,9 @@ class KnowledgeBase
     /** @var array<string, array{type: string, name: string, url: string, book: string}> */
     protected array $sources = [];
 
+    /** @var array<string, array{url: string, alt: string, caption: string, page_title: string, page_url: string}> */
+    protected array $images = [];
+
     /** Page titles seen in search results, so status messages can name them. */
     protected array $pageNameCache = [];
 
@@ -72,7 +75,9 @@ class KnowledgeBase
                 'description' =>
                     'Read the full text of a single wiki page, given the numeric id shown in '
                     . 'search results. Use this whenever the answer depends on the actual '
-                    . 'contents of a page rather than just its title.',
+                    . 'contents of a page rather than just its title. If the page has images '
+                    . '(diagrams, screenshots, drawings, logos) they are listed with exact '
+                    . 'URLs you may embed as markdown ![alt](url). Never invent image URLs.',
                 'input_schema' => [
                     'type' => 'object',
                     'properties' => [
@@ -206,17 +211,25 @@ class KnowledgeBase
 
         $body = ContentText::pageBody($page, $this->config->pageCharLimit());
         $location = $this->locationOf($page);
+        $images = PageImages::fromPage($page);
+        $this->recordImages($images);
 
         $header = "# {$page->name}";
         if ($location !== '') {
             $header .= "\n(Located in: {$location})";
         }
 
+        $imageBlock = PageImages::formatForModel($images);
+
         if (trim($body) === '') {
-            return "{$header}\n\nThis page is empty.";
+            $empty = "{$header}\n\nThis page is empty.";
+
+            return $imageBlock === '' ? $empty : "{$empty}\n\n{$imageBlock}";
         }
 
-        return "{$header}\n\n{$body}";
+        return $imageBlock === ''
+            ? "{$header}\n\n{$body}"
+            : "{$header}\n\n{$body}\n\n{$imageBlock}";
     }
 
     protected function listBooks(): string
@@ -302,6 +315,25 @@ class KnowledgeBase
     }
 
     /**
+     * @param array<int, array{url: string, alt: string, caption: string, page_title: string, page_url: string}> $images
+     */
+    protected function recordImages(array $images): void
+    {
+        foreach ($images as $image) {
+            if (count($this->images) >= PageImages::PER_ANSWER) {
+                return;
+            }
+
+            $url = (string) ($image['url'] ?? '');
+            if ($url === '' || isset($this->images[$url])) {
+                continue;
+            }
+
+            $this->images[$url] = $image;
+        }
+    }
+
+    /**
      * Every distinct entity touched while answering, for display as citations.
      *
      * @return array<int, array{type: string, name: string, url: string, book: string}>
@@ -309,5 +341,15 @@ class KnowledgeBase
     public function sources(): array
     {
         return array_values($this->sources);
+    }
+
+    /**
+     * Images from pages that were actually read, for display in the chat.
+     *
+     * @return array<int, array{url: string, alt: string, caption: string, page_title: string, page_url: string}>
+     */
+    public function images(): array
+    {
+        return array_values($this->images);
     }
 }

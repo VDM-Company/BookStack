@@ -12,6 +12,7 @@ use BookStackAiChat\Anthropic\MessageAccumulator;
 use BookStackAiChat\Chat\History;
 use BookStackAiChat\Chat\Prompt;
 use BookStackAiChat\Config;
+use BookStackAiChat\Knowledge\PageImages;
 
 $checks = new Checks('Units');
 $config = Config::instance();
@@ -94,6 +95,80 @@ $checks->that('requires a follow-up fence after every user-facing answer', str_c
 $checks->that('follow-ups must be specific to the answer', str_contains($prompt, 'specific to this answer'));
 $checks->that('omits the fence only for a pure error or refusal', str_contains($prompt, 'pure error or refusal'));
 $checks->that('omits page context when there is none', !str_contains(Prompt::build($config, null, []), 'currently viewing'));
+$checks->that('tells the model to embed wiki images', str_contains($prompt, '![caption](url)'));
+$checks->that('forbids inventing image URLs', str_contains($prompt, 'Do not invent, guess or rewrite image URLs'));
+
+$checks->section('Page image extraction');
+
+$html = '<p>Intro</p>'
+    . '<img src="/uploads/images/gallery/2024-01/vpn.png" alt="VPN diagram">'
+    . '<div drawio-diagram="9"><img src="/uploads/images/drawio/2024-01/flow.png" alt="Flow"></div>'
+    . '<img src="javascript:alert(1)" alt="xss">'
+    . '<img src="https://evil.test/uploads/images/gallery/x.png" alt="hotlink">'
+    . '<img src="/uploads/images/../../etc/passwd" alt="traverse">';
+
+$fromHtml = PageImages::extract($html, '', 8);
+$checks->same('keeps two safe wiki images from HTML', 2, count($fromHtml));
+$checks->same('first image is the gallery path', '/uploads/images/gallery/2024-01/vpn.png', $fromHtml[0]['url'] ?? null);
+$checks->same('first image keeps alt text', 'VPN diagram', $fromHtml[0]['alt'] ?? null);
+$checks->same('second image is the drawing', '/uploads/images/drawio/2024-01/flow.png', $fromHtml[1]['url'] ?? null);
+
+$local = url('/uploads/images/gallery/2024-01/logo.png');
+$fromLocal = PageImages::extract('<img src="' . $local . '" alt="Logo">');
+$checks->same('absolute same-host URL is accepted', 1, count($fromLocal));
+$checks->same('absolute same-host URL is normalised', PageImages::sanitiseUrl($local), $fromLocal[0]['url'] ?? null);
+
+$fromMd = PageImages::extract('', 'See ![Shot](/uploads/images/gallery/2024-01/ui.png) please');
+$checks->same('reads a markdown image', '/uploads/images/gallery/2024-01/ui.png', $fromMd[0]['url'] ?? null);
+$checks->same('markdown alt is kept', 'Shot', $fromMd[0]['alt'] ?? null);
+
+$capped = PageImages::extract(
+    '<img src="/uploads/images/gallery/a.png" alt="a">'
+    . '<img src="/uploads/images/gallery/b.png" alt="b">'
+    . '<img src="/uploads/images/gallery/c.png" alt="c">'
+    . '<img src="/uploads/images/gallery/d.png" alt="d">'
+    . '<img src="/uploads/images/gallery/e.png" alt="e">',
+    '',
+    4,
+);
+$checks->same('caps images per page', 4, count($capped));
+
+$duped = PageImages::extract(
+    '<img src="/uploads/images/gallery/same.png" alt="html">',
+    '![md](/uploads/images/gallery/same.png)',
+);
+$checks->same('deduplicates the same URL', 1, count($duped));
+
+$checks->same('rejects javascript URLs', null, PageImages::sanitiseUrl('javascript:alert(1)'));
+$checks->same('rejects data URLs', null, PageImages::sanitiseUrl('data:image/png;base64,aaaa'));
+$checks->same('rejects protocol-relative URLs', null, PageImages::sanitiseUrl('//evil.test/x.png'));
+$checks->same('rejects off-site hosts', null, PageImages::sanitiseUrl('https://evil.test/uploads/images/gallery/x.png'));
+$checks->same('rejects path traversal', null, PageImages::sanitiseUrl('/uploads/images/../secrets/x.png'));
+$checks->same('allows an attachment preview', '/attachments/12?open=true', PageImages::sanitiseUrl('/attachments/12?open=true'));
+$checks->same('rejects a non-image attachment query', null, PageImages::sanitiseUrl('/attachments/12?open=false'));
+
+$replaced = PageImages::replaceHtmlImages(
+    'Before <img src="/uploads/images/drawio/2024-01/n.png" alt="Net"> after'
+);
+$checks->same(
+    'leftover HTML images become markdown',
+    'Before ![Net](/uploads/images/drawio/2024-01/n.png) after',
+    $replaced,
+);
+
+$listed = PageImages::formatForModel([
+    ['url' => '/uploads/images/gallery/a.png', 'alt' => 'A', 'page_title' => 'VPN'],
+]);
+$checks->that('model listing includes the markdown', str_contains($listed, '![A](/uploads/images/gallery/a.png)'));
+$checks->that('model listing names the page', str_contains($listed, 'VPN'));
+$checks->that('model listing forbids invented URLs', str_contains($listed, 'do not invent URLs'));
+$checks->same('empty listing is blank', '', PageImages::formatForModel([]));
+
+$agent = file_get_contents(dirname(__DIR__) . '/src/Chat/ChatAgent.php');
+$checks->that(
+    'agent emits a structured images event',
+    is_string($agent) && str_contains($agent, "emit('images'"),
+);
 
 $checks->section('Configuration defaults and bounds');
 

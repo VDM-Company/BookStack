@@ -32,6 +32,7 @@ return [
     'state_reading_generic' => 'Reading a page…',
     'state_listing' => 'Looking over the books…',
 
+    'images' => 'Images from the wiki',
     'sources' => 'Sources',
     'sources_more' => 'Show :count more sources',
     'sources_less' => 'Show less',

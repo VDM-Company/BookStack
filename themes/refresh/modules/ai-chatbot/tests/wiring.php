@@ -46,6 +46,8 @@ foreach ([
     BookStack\Entities\Queries\BookQueries::class => ['visibleForList'],
     BookStack\Entities\Tools\Markdown\HtmlToMarkdown::class => ['convert'],
     BookStack\Http\HttpRequestService::class => ['buildClient'],
+    BookStack\Uploads\Image::class => [],
+    BookStack\Uploads\Attachment::class => ['getUrl'],
 ] as $class => $methods) {
     $short = class_basename($class);
     $checks->that("{$short} exists", class_exists($class));
@@ -54,6 +56,16 @@ foreach ([
         $checks->that("{$short}::{$method}() exists", method_exists($class, $method));
     }
 }
+
+$checks->that(
+    'Image::scopeVisible() exists',
+    method_exists(BookStack\Uploads\Image::class, 'scopeVisible'),
+);
+$checks->that(
+    'PageImages extractor loads',
+    class_exists(BookStackAiChat\Knowledge\PageImages::class)
+        && method_exists(BookStackAiChat\Knowledge\PageImages::class, 'extract'),
+);
 
 $checks->that(
     'layouts.parts.base-body-end still exists',

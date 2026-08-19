@@ -47,6 +47,10 @@ class ContentText
             $markdown = trim((string) ($page->text ?? ''));
         }
 
+        // Draw.io blocks survive HtmlToMarkdown as raw <img> tags; turn those
+        // (and any other leftover HTML images) into markdown the model can cite.
+        $markdown = PageImages::replaceHtmlImages($markdown);
+
         // Long runs of blank lines are pure token cost.
         $markdown = preg_replace("/\n{3,}/", "\n\n", $markdown) ?? $markdown;
 

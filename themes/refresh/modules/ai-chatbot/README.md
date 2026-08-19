@@ -41,8 +41,9 @@ The assistant is given three tools and left to decide how to use them:
 | `list_books` | Lists books, for orienting on vague questions |
 
 A typical exchange runs: search → read the two or three promising pages →
-answer, naming the pages used. The UI shows each step as it happens and links
-every page that was opened underneath the answer.
+answer, naming the pages used. The UI shows each step as it happens, renders
+images from those pages in the reply, and links every page that was opened
+underneath the answer.
 
 Letting the model drive its own retrieval, rather than stuffing one search
 result set into a single prompt, is what makes follow-up questions work. "What
@@ -223,4 +224,7 @@ Everything else is additive and cannot conflict.
   The prompt instructs the model to retry with different wording, which covers
   most of the gap.
 - **No conversation history across tabs or sessions**, by design — see above.
-- **Page content only.** Attachments, images and non-text uploads are not read.
+- **Images come from pages the assistant actually reads** — gallery photos,
+  draw.io diagrams and image attachments on that page, permission-scoped like
+  the rest of the tools. At most a few per page and per answer. File
+  attachments that are not images are not opened.

@@ -26,8 +26,8 @@ if (cut === -1) {
 
 globalThis.window = {location: {origin: 'https://wiki.test'}};
 
-const module = `${source.slice(0, cut)}\nexport {renderMarkdown, esc, safeHref, splitFollowUps, resolveFollowUps, pickFallbackFollowUps};`;
-const {renderMarkdown, esc, safeHref, splitFollowUps, resolveFollowUps, pickFallbackFollowUps} = await import(`data:text/javascript,${encodeURIComponent(module)}`);
+const module = `${source.slice(0, cut)}\nexport {renderMarkdown, esc, safeHref, safeImageSrc, splitFollowUps, resolveFollowUps, pickFallbackFollowUps};`;
+const {renderMarkdown, esc, safeHref, safeImageSrc, splitFollowUps, resolveFollowUps, pickFallbackFollowUps} = await import(`data:text/javascript,${encodeURIComponent(module)}`);
 
 let failures = 0;
 let total = 0;
@@ -84,6 +84,25 @@ excludes('html in list item escaped', '- <iframe src=x>', '<iframe');
 excludes('html in table cell escaped', '| a |\n|---|\n| <svg onload=x> |', '<svg');
 excludes('html in code fence escaped', '```\n<script>alert(1)</script>\n```', '<script>');
 excludes('html in blockquote escaped', '> <script>x</script>', '<script>');
+
+section('Images');
+renders('markdown image', '![diagram](/uploads/images/gallery/d.png)',
+    '<p><img src="/uploads/images/gallery/d.png" alt="diagram" loading="lazy"></p>');
+renders('empty alt is allowed', '![](/uploads/images/gallery/d.png)',
+    '<p><img src="/uploads/images/gallery/d.png" alt="" loading="lazy"></p>');
+contains('same-origin wiki image becomes a path', '![d](https://wiki.test/uploads/images/gallery/x.png)',
+    'src="/uploads/images/gallery/x.png"');
+contains('attachment image allowed', '![file](/attachments/9?open=true)',
+    'src="/attachments/9?open=true"');
+excludes('javascript image rejected', '![x](javascript:alert(1))', '<img');
+excludes('data image rejected', '![x](data:image/png;base64,aaaa)', '<img');
+excludes('off-site image rejected', '![x](https://evil.test/uploads/images/gallery/x.png)', '<img');
+excludes('path traversal rejected', '![x](/uploads/images/../etc/passwd)', '<img');
+excludes('protocol-relative image rejected', '![x](//evil.test/x.png)', '<img');
+excludes('onerror break-out not emitted', '![x](/uploads/images/gallery/x.png" onerror="alert(1))', 'onerror="alert(1)"');
+contains('image wins over a link on the same text', '![diagram](/uploads/images/gallery/d.png)', '<img');
+check('safeImageSrc allows gallery path', safeImageSrc('/uploads/images/gallery/a.png') === '/uploads/images/gallery/a.png');
+check('safeImageSrc rejects javascript', safeImageSrc('javascript:x') === null);
 
 section('Links');
 contains('external link opens in a new tab', '[docs](https://example.test/a)',

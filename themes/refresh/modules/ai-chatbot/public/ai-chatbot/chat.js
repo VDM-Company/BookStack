@@ -43,8 +43,55 @@ function safeHref(href) {
     return /^(https?:\/\/|\/(?!\/)|#)/i.test(href) ? href : null;
 }
 
+/**
+ * Only same-origin BookStack gallery/draw.io paths and attachment downloads.
+ * Model-invented hosts, data URIs and path traversal never become an img src.
+ */
+function safeImageSrc(href) {
+    if (typeof href !== 'string' || href === '') return null;
+
+    const raw = href.replace(/&amp;/g, '&');
+    if (/^(javascript|data|vbscript|file):/i.test(raw) || raw.startsWith('//')) {
+        return null;
+    }
+
+    let path = raw;
+    if (/^https?:\/\//i.test(raw)) {
+        try {
+            const parsed = new URL(raw);
+            if (parsed.origin !== window.location.origin) return null;
+            path = parsed.pathname + parsed.search;
+        } catch (error) {
+            return null;
+        }
+    } else if (!raw.startsWith('/')) {
+        return null;
+    }
+
+    if (path.includes('..') || path.includes('\\')) return null;
+
+    const pathname = path.split('?')[0];
+    const search = path.includes('?') ? path.slice(path.indexOf('?') + 1) : '';
+
+    if (/^\/(?:[\w.-]+\/)*uploads\/images\/[A-Za-z0-9._/-]+$/.test(pathname)) {
+        return pathname;
+    }
+
+    if (/^\/(?:[\w.-]+\/)*attachments\/\d+$/.test(pathname) && (search === '' || search === 'open=true')) {
+        return search === 'open=true' ? `${pathname}?open=true` : pathname;
+    }
+
+    return null;
+}
+
 function inlineFormat(text) {
-    let out = text.replace(/\[([^\]\n]+)]\(([^)\s]+)\)/g, (match, label, href) => {
+    let out = text.replace(/!\[([^\]\n]*)]\(([^)\s]+)\)/g, (match, alt, href) => {
+        const url = safeImageSrc(href);
+        if (!url) return match;
+        return openTag('img', `src="${esc(url)}" alt="${alt}" loading="lazy"`);
+    });
+
+    out = out.replace(/\[([^\]\n]+)]\(([^)\s]+)\)/g, (match, label, href) => {
         const url = safeHref(href);
         if (!url) return match;
         const external = /^https?:\/\//i.test(url) && !url.startsWith(window.location.origin);
@@ -510,6 +557,12 @@ class Chatbot {
 
             body.innerHTML = renderMarkdown(message.content);
 
+            if (message.images && message.images.length) {
+                const extra = this.unusedImages(message.images, message.content);
+                const gallery = extra.length ? this.buildImages(extra) : null;
+                if (gallery) wrapper.append(gallery);
+            }
+
             if (message.sources && message.sources.length) {
                 wrapper.append(this.buildSources(message.sources));
             }
@@ -676,6 +729,54 @@ class Chatbot {
         return status;
     }
 
+    unusedImages(images, markdown) {
+        const text = String(markdown || '');
+
+        return (Array.isArray(images) ? images : []).filter(image => {
+            const url = safeImageSrc(image && image.url);
+            if (!url) return false;
+            return !text.includes(url) && !text.includes(String(image.url || ''));
+        });
+    }
+
+    buildImages(images) {
+        const list = document.createElement('div');
+        list.className = 'aic-images';
+        list.setAttribute('aria-label', this.t('images'));
+
+        images.forEach(image => {
+            const url = safeImageSrc(image.url);
+            if (!url) return;
+
+            const figure = document.createElement('figure');
+            const img = document.createElement('img');
+            img.src = url;
+            img.alt = image.alt || image.caption || '';
+            img.loading = 'lazy';
+
+            const pageUrl = image.page_url ? safeHref(image.page_url) : null;
+            if (pageUrl) {
+                const link = document.createElement('a');
+                link.href = pageUrl;
+                link.append(img);
+                figure.append(link);
+            } else {
+                figure.append(img);
+            }
+
+            const caption = image.caption || image.alt || image.page_title;
+            if (caption) {
+                const label = document.createElement('figcaption');
+                label.textContent = caption;
+                figure.append(label);
+            }
+
+            list.append(figure);
+        });
+
+        return list.childElementCount ? list : null;
+    }
+
     buildSources(sources) {
         const visible = 3;
         const container = document.createElement('div');
@@ -792,7 +893,7 @@ class Chatbot {
 
     async stream(question) {
         const wrapper = this.addMessage('assistant');
-        const assistant = {role: 'assistant', content: '', sources: []};
+        const assistant = {role: 'assistant', content: '', sources: [], images: []};
         const generation = this.generation;
 
         this.controller = new AbortController();
@@ -899,6 +1000,8 @@ class Chatbot {
                         }
                     } else if (name === 'sources') {
                         assistant.sources = data.sources || [];
+                    } else if (name === 'images') {
+                        assistant.images = Array.isArray(data.images) ? data.images : [];
                     } else if (name === 'notice') {
                         this.appendNote(wrapper, 'aic-notice', data.message);
                     } else if (name === 'error') {
@@ -918,6 +1021,12 @@ class Chatbot {
             if (generation === this.generation) {
                 flush();
                 finishStatus();
+
+                const extra = this.unusedImages(assistant.images, splitFollowUps(assistant.content).text);
+                if (extra.length) {
+                    const gallery = this.buildImages(extra);
+                    if (gallery) wrapper.append(gallery);
+                }
 
                 if (assistant.sources.length) {
                     wrapper.append(this.buildSources(assistant.sources));

@@ -100,6 +100,12 @@ class ChatAgent
             $emit('sources', ['sources' => $sources]);
         }
 
+        $images = $this->knowledge->images();
+
+        if ($images !== []) {
+            $emit('images', ['images' => $images]);
+        }
+
         if (!$producedText) {
             $emit('notice', ['message' => 'The assistant did not produce an answer. Please try rephrasing.']);
         }
