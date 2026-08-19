@@ -88,6 +88,14 @@ $checks->that('names the current page', str_contains($prompt, 'Backup Policy'));
 $checks->that('includes the page URL', str_contains($prompt, 'https://wiki.test/books/ops/page/backup'));
 $checks->that('explains permission scoping', stripos($prompt, 'permission') !== false);
 $checks->that('requires searching before answering', str_contains($prompt, 'Search before answering'));
+$checks->that('answers after one search and at most two reads', str_contains($prompt, 'at most 1–2'));
+$checks->that('does not hunt for extra coverage', str_contains($prompt, 'Do not keep searching for extra coverage or completeness'));
+$checks->that(
+    'does not burn steps retrying a thin first search',
+    str_contains($prompt, 'answer from what you have rather than retrying')
+        && !str_contains($prompt, 'try again with different vocabulary before'),
+);
+$checks->that('capabilities questions skip search', str_contains($prompt, 'Skip the search for that kind of question'));
 $checks->that('prefers a short answer', str_contains($prompt, '5–10 sentences'));
 $checks->that('forbids pasting long page extracts', str_contains($prompt, 'Do not paste or repeat long page extracts'));
 $checks->that('forbids inventing answers', stripos($prompt, 'invention') !== false || stripos($prompt, 'do not guess') !== false);
@@ -171,6 +179,14 @@ $agent = file_get_contents(dirname(__DIR__) . '/src/Chat/ChatAgent.php');
 $checks->that(
     'agent emits a structured images event',
     is_string($agent) && str_contains($agent, "emit('images'"),
+);
+$checks->that(
+    'last agent step streams with empty tools',
+    is_string($agent) && str_contains($agent, '$step < $maxSteps ? $this->knowledge->toolDefinitions() : []'),
+);
+$checks->that(
+    'research-step-limit notice is not a hard stop',
+    is_string($agent) && !str_contains($agent, 'reached its research step limit'),
 );
 
 $checks->section('Configuration defaults and bounds');
@@ -280,6 +296,21 @@ $checks->that(
 $checks->that(
     'agent loop can stop when the browser is gone',
     str_contains((string) file_get_contents(dirname(__DIR__) . '/src/Chat/ChatAgent.php'), 'shouldStop'),
+);
+$streamSource = (string) file_get_contents(dirname(__DIR__) . '/src/Http/EventStream.php');
+$checks->that(
+    'stream primes proxies with an 8KB SSE comment',
+    str_contains($streamSource, 'function prime') && str_contains($streamSource, '8192'),
+);
+$checks->that(
+    'controller primes the stream before the agent runs',
+    is_string($controller) && str_contains($controller, '$stream->prime()'),
+);
+$checks->that(
+    'SSE response asks proxies not to gzip or transform',
+    is_string($controller)
+        && str_contains($controller, 'no-transform')
+        && str_contains($controller, "'Content-Encoding' => 'none'"),
 );
 
 $checks->section('ApiException user messages');

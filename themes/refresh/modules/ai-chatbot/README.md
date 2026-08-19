@@ -75,15 +75,17 @@ spend your API credits. Set `AI_CHATBOT_ALLOW_GUESTS=true` only if you mean it.
 
 ## Cost control
 
-Each question costs at most `AI_CHATBOT_MAX_STEPS` model calls. Practical
-levers, roughly in order of effect:
+Each question costs at most `AI_CHATBOT_MAX_STEPS` model calls. The last
+call is reserved for writing the answer; earlier calls may search or read
+pages. Practical levers, roughly in order of effect:
 
 - `AI_CHATBOT_MODEL` — defaults to `claude-haiku-4-5`. `claude-sonnet-5`
   is better quality at higher cost; `claude-opus-5` reasons hardest.
 - `AI_CHATBOT_PAGE_CHARS` — defaults to 4000. Page bodies dominate input
   tokens on a wiki with long pages.
 - `AI_CHATBOT_SEARCH_RESULTS` — defaults to 5 results per search.
-- `AI_CHATBOT_MAX_STEPS` — defaults to 6. Fewer steps means less research.
+- `AI_CHATBOT_MAX_STEPS` — defaults to 6. Research-plus-answer budget; the
+  last step is answer-only. Fewer steps means less research.
 - `AI_CHATBOT_HISTORY_TURNS` — defaults to 6 prior messages.
 - `AI_CHATBOT_MAX_TOKENS` — defaults to 1024 for shorter replies.
 - `AI_CHATBOT_RATE_LIMIT` — per-user, per-minute ceiling.

@@ -137,6 +137,7 @@ class ChatController extends Controller
             @set_time_limit($config->timeout() + 30);
 
             $stream = new EventStream();
+            $stream->prime();
 
             try {
                 $agent->run(
@@ -159,10 +160,11 @@ class ChatController extends Controller
             }
         }, 200, [
             'Content-Type' => 'text/event-stream; charset=utf-8',
-            'Cache-Control' => 'no-cache, no-store, private',
+            'Cache-Control' => 'no-cache, no-store, no-transform, private',
             'Connection' => 'keep-alive',
-            // Stops nginx buffering the response into uselessness.
+            // Stops nginx / Cloudways from gzipping or buffering the stream.
             'X-Accel-Buffering' => 'no',
+            'Content-Encoding' => 'none',
         ]);
     }
 

@@ -71,9 +71,10 @@ class Config
     }
 
     /**
-     * Maximum number of assistant turns in one exchange. Each search or page
-     * read the assistant performs costs one turn, so this bounds both latency
-     * and token spend on a single question.
+     * Maximum number of assistant turns in one exchange: research plus a final
+     * answer. Tools are allowed on every turn except the last, which is reserved
+     * for writing the reply from what was already read. Each search or page
+     * read costs one of the earlier turns, so this bounds latency and spend.
      */
     public function maxSteps(): int
     {

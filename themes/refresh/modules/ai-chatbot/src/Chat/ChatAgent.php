@@ -48,10 +48,16 @@ class ChatAgent
                 break;
             }
 
+            // Tools on steps 1..maxSteps-1 only. The last turn is answer-only
+            // (empty tools omit the payload key) so a lookup-happy model still
+            // has to write from what it already read. maxSteps of 1 means the
+            // first and only turn has no tools.
+            $tools = $step < $maxSteps ? $this->knowledge->toolDefinitions() : [];
+
             try {
                 $accumulator = $this->client->streamMessage(
                     $messages,
-                    $this->knowledge->toolDefinitions(),
+                    $tools,
                     $system,
                     $remaining,
                     function (string $event, array $data) use ($emit, &$producedText): void {
@@ -76,12 +82,7 @@ class ChatAgent
 
             $toolCalls = $accumulator->toolCalls();
 
-            if ($accumulator->stopReason() !== 'tool_use' || $toolCalls === []) {
-                break;
-            }
-
-            if ($step === $maxSteps) {
-                $emit('notice', ['message' => 'The assistant reached its research step limit for this question.']);
+            if ($accumulator->stopReason() !== 'tool_use' || $toolCalls === [] || $tools === []) {
                 break;
             }
 

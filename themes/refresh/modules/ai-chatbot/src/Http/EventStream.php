@@ -28,6 +28,18 @@ class EventStream
         ob_implicit_flush(true);
     }
 
+    /**
+     * Cloudflare, gzip and some nginx defaults hold the first 1–8KB (or the
+     * whole body if it never reaches that). Local Docker has none of those, so
+     * tokens appear as they are written. An SSE comment is ignored by the
+     * browser parser and by chat.js.
+     */
+    public function prime(): void
+    {
+        echo ':' . str_repeat(' ', 8192) . "\n\n";
+        flush();
+    }
+
     public function send(string $event, array $data): void
     {
         if ($this->aborted) {
