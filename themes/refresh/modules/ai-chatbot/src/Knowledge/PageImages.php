@@ -10,8 +10,10 @@ use BookStack\Uploads\Image;
  * Finds images that already belong to a visible wiki page.
  *
  * URLs are reduced to same-origin BookStack paths the asking user can already
- * request in the browser. Nothing here invents public links or bypasses page
- * permissions: callers must have loaded the page through a visible* query.
+ * request in the browser. S3 and STORAGE_URL hosts are rewritten to
+ * /uploads/images/... so a private bucket is never sent to the widget.
+ * Nothing here invents public links or bypasses page permissions: callers
+ * must have loaded the page through a visible* query.
  */
 class PageImages
 {
@@ -20,6 +22,9 @@ class PageImages
 
     /** @var string[] */
     public const IMAGE_EXTENSIONS = ['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'bmp', 'avif'];
+
+    /** @var string[] */
+    public const RASTER_EXTENSIONS = ['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'avif'];
 
     /**
      * Images from a page the current user is already allowed to read.
@@ -37,6 +42,7 @@ class PageImages
             $found = self::extract((string) ($page->html ?? ''), (string) ($page->markdown ?? ''), $limit);
             $found = self::appendAttachments($page, $found, $limit);
             $found = self::appendGallery($page, $found, $limit);
+            $found = self::finalize($found, $limit);
 
             $pageUrl = '';
             try {
@@ -69,26 +75,35 @@ class PageImages
      */
     public static function extract(string $html, string $markdown = '', int $limit = self::PER_PAGE): array
     {
+        $limit = max(0, $limit);
+        if ($limit === 0) {
+            return [];
+        }
+
         $found = [];
         $seen = [];
 
         foreach (self::fromHtml($html) as $image) {
-            self::push($found, $seen, $image, $limit);
+            self::push($found, $seen, $image, PHP_INT_MAX);
         }
 
         foreach (self::fromMarkdown($markdown) as $image) {
-            self::push($found, $seen, $image, $limit);
+            self::push($found, $seen, $image, PHP_INT_MAX);
         }
 
-        return $found;
+        return self::finalize($found, $limit);
     }
 
     /**
      * Accept only a same-origin BookStack image or attachment path.
+     *
+     * S3 and STORAGE_URL hosts that point at /uploads/images/... are rewritten
+     * to that path so the widget never receives an amazonaws.com URL.
      */
     public static function sanitiseUrl(string $url): ?string
     {
         $url = html_entity_decode(trim($url), ENT_QUOTES | ENT_HTML5, 'UTF-8');
+        $url = self::rewriteStorageUrl($url);
 
         if ($url === '' || str_contains($url, '..') || str_contains($url, '\\')) {
             return null;
@@ -138,6 +153,10 @@ class PageImages
             : $path;
 
         if (preg_match('#^/uploads/images/[A-Za-z0-9._/-]+$#', $relative)) {
+            if (!self::isAllowedImagePath($relative)) {
+                return null;
+            }
+
             return $path;
         }
 
@@ -171,12 +190,44 @@ class PageImages
                     $alt = self::plainAlt($altMatch[2]);
                 }
 
+                if (self::isEditableSourceLabel($alt) || !self::isAllowedImagePath($url)) {
+                    return '';
+                }
+
                 return '![' . $alt . '](' . $url . ')';
             },
             $text,
         );
 
         return is_string($replaced) ? $replaced : $text;
+    }
+
+    /**
+     * Rewrite HTML and markdown image URLs in page text given to the model.
+     */
+    public static function rewriteEmbeddedImages(string $text): string
+    {
+        $text = self::replaceHtmlImages($text);
+
+        $rewritten = preg_replace_callback(
+            '/!\[([^\]\n]*)]\(([^)\s]+)\)/',
+            static function (array $match): string {
+                $url = self::sanitiseUrl($match[2]);
+                if ($url === null) {
+                    return $match[0];
+                }
+
+                $alt = self::plainAlt($match[1]);
+                if (self::isEditableSourceLabel($alt) || !self::isAllowedImagePath($url)) {
+                    return '';
+                }
+
+                return '![' . $alt . '](' . $url . ')';
+            },
+            $text,
+        );
+
+        return is_string($rewritten) ? $rewritten : $text;
     }
 
     /**
@@ -351,7 +402,7 @@ class PageImages
                 ->scopes(['visible'])
                 ->where('uploaded_to', $page->id)
                 ->orderBy('id')
-                ->limit($limit)
+                ->limit(max($limit * 3, 12))
                 ->get();
         } catch (\Throwable) {
             return $found;
@@ -380,6 +431,22 @@ class PageImages
 
     /**
      * @param array<int, array{url: string, alt: string, name?: string}> $found
+     * @return array<int, array{url: string, alt: string, name?: string}>
+     */
+    protected static function finalize(array $found, int $limit): array
+    {
+        $kept = [];
+        $seen = [];
+
+        foreach ($found as $image) {
+            self::push($kept, $seen, $image, PHP_INT_MAX);
+        }
+
+        return array_slice(self::preferRaster($kept), 0, max(0, $limit));
+    }
+
+    /**
+     * @param array<int, array{url: string, alt: string, name?: string}> $found
      * @param array<string, true>                                       $seen
      * @param array{url: string, alt: string, name?: string}            $image
      */
@@ -390,12 +457,188 @@ class PageImages
         }
 
         $url = $image['url'];
-        if ($url === '' || isset($seen[$url])) {
+        if ($url === '' || isset($seen[$url]) || !self::isDisplayable($image)) {
             return;
         }
 
         $seen[$url] = true;
         $found[] = $image;
+    }
+
+    /**
+     * Drop a source SVG when a raster preview of the same diagram exists.
+     *
+     * @param array<int, array{url: string, alt: string, name?: string}> $found
+     * @return array<int, array{url: string, alt: string, name?: string}>
+     */
+    protected static function preferRaster(array $found): array
+    {
+        $rasterStems = [];
+
+        foreach ($found as $image) {
+            if (in_array(self::extensionOf($image['url']), self::RASTER_EXTENSIONS, true)) {
+                $rasterStems[self::displayStem($image)] = true;
+            }
+        }
+
+        $out = [];
+        foreach ($found as $image) {
+            if (self::extensionOf($image['url']) === 'svg' && isset($rasterStems[self::displayStem($image)])) {
+                continue;
+            }
+
+            $out[] = $image;
+        }
+
+        return $out;
+    }
+
+    /**
+     * @param array{url: string, alt: string, name?: string} $image
+     */
+    protected static function isDisplayable(array $image): bool
+    {
+        $alt = (string) ($image['alt'] ?? '');
+        $name = (string) ($image['name'] ?? '');
+
+        if (self::isEditableSourceLabel($alt) || self::isEditableSourceLabel($name)) {
+            return false;
+        }
+
+        return self::isAllowedImagePath((string) ($image['url'] ?? ''));
+    }
+
+    protected static function isEditableSourceLabel(string $label): bool
+    {
+        $label = strtolower($label);
+
+        return str_contains($label, 'editable source')
+            || str_contains($label, 'editable-source');
+    }
+
+    protected static function isAllowedImagePath(string $url): bool
+    {
+        $path = (string) (parse_url($url, PHP_URL_PATH) ?: $url);
+        $extension = self::extensionOf($path);
+
+        if ($extension === 'drawio' || $extension === 'xml') {
+            return false;
+        }
+
+        if (str_contains($path, '/uploads/images/')) {
+            return in_array($extension, self::IMAGE_EXTENSIONS, true);
+        }
+
+        return true;
+    }
+
+    /**
+     * @param array{url: string, alt: string, name?: string} $image
+     */
+    protected static function displayStem(array $image): string
+    {
+        $label = trim((string) ($image['name'] ?? ''));
+        if ($label === '') {
+            $label = trim((string) ($image['alt'] ?? ''));
+        }
+
+        $label = strtolower($label);
+        $label = preg_replace('/\s*\((?:editable\s+source)\)\s*/i', '', $label) ?? $label;
+        $label = preg_replace('/\.(?:png|jpe?g|gif|webp|svg|bmp|avif)$/i', '', $label) ?? $label;
+        $label = trim($label);
+
+        if ($label !== '') {
+            return $label;
+        }
+
+        $base = strtolower(basename((string) (parse_url($image['url'], PHP_URL_PATH) ?: $image['url'])));
+
+        return preg_replace('/\.[^.]+$/', '', $base) ?? $base;
+    }
+
+    protected static function extensionOf(string $url): string
+    {
+        $path = (string) (parse_url($url, PHP_URL_PATH) ?: $url);
+
+        return strtolower(pathinfo($path, PATHINFO_EXTENSION));
+    }
+
+    /**
+     * Turn an S3 or STORAGE_URL object URL into /uploads/images/... when possible.
+     */
+    protected static function rewriteStorageUrl(string $url): string
+    {
+        if (!preg_match('#^https?://#i', $url)) {
+            return $url;
+        }
+
+        $parts = parse_url($url);
+        if ($parts === false) {
+            return $url;
+        }
+
+        $host = strtolower((string) ($parts['host'] ?? ''));
+        $path = (string) ($parts['path'] ?? '');
+
+        if ($host === '' || !self::isStorageHost($host)) {
+            return $url;
+        }
+
+        if (preg_match('#(/uploads/images/[A-Za-z0-9._/-]+)#', $path, $match)) {
+            return $match[1];
+        }
+
+        return $url;
+    }
+
+    protected static function isStorageHost(string $host): bool
+    {
+        foreach (self::configuredStorageHosts() as $known) {
+            if ($host === $known) {
+                return true;
+            }
+        }
+
+        // Virtual-hosted: {bucket}.s3.amazonaws.com / {bucket}.s3.{region}.amazonaws.com
+        // and the older {bucket}.s3-{region}.amazonaws.com form.
+        if (preg_match('/\.s3(?:[.-][a-z0-9-]+)?\.amazonaws\.com$/', $host)) {
+            return true;
+        }
+
+        // Path-style: s3.amazonaws.com / s3.{region}.amazonaws.com / s3-{region}.amazonaws.com
+        if (preg_match('/^s3(?:[.-][a-z0-9-]+)?\.amazonaws\.com$/', $host)) {
+            return true;
+        }
+
+        return false;
+    }
+
+    /**
+     * @return string[]
+     */
+    protected static function configuredStorageHosts(): array
+    {
+        $hosts = [];
+
+        try {
+            foreach ([
+                config('filesystems.url'),
+                config('filesystems.disks.s3.endpoint'),
+                config('filesystems.disks.s3.url'),
+            ] as $value) {
+                if (!is_string($value) || $value === '' || strtolower($value) === 'false') {
+                    continue;
+                }
+
+                $host = strtolower((string) (parse_url($value, PHP_URL_HOST) ?? ''));
+                if ($host !== '') {
+                    $hosts[] = $host;
+                }
+            }
+        } catch (\Throwable) {
+        }
+
+        return array_values(array_unique($hosts));
     }
 
     protected static function plainAlt(string $alt): string

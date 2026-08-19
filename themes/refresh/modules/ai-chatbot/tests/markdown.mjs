@@ -94,6 +94,11 @@ contains('same-origin wiki image becomes a path', '![d](https://wiki.test/upload
     'src="/uploads/images/gallery/x.png"');
 contains('attachment image allowed', '![file](/attachments/9?open=true)',
     'src="/attachments/9?open=true"');
+contains('s3 gallery url becomes a path', '![d](https://bucket.s3.amazonaws.com/uploads/images/gallery/x.png)',
+    'src="/uploads/images/gallery/x.png"');
+contains('regional s3 gallery url becomes a path', '![d](https://bucket.s3.ap-northeast-1.amazonaws.com/uploads/images/gallery/x.png)',
+    'src="/uploads/images/gallery/x.png"');
+excludes('s3 host is not left in src', '![d](https://bucket.s3.amazonaws.com/uploads/images/gallery/x.png)', 'amazonaws.com');
 excludes('javascript image rejected', '![x](javascript:alert(1))', '<img');
 excludes('data image rejected', '![x](data:image/png;base64,aaaa)', '<img');
 excludes('off-site image rejected', '![x](https://evil.test/uploads/images/gallery/x.png)', '<img');
@@ -102,6 +107,7 @@ excludes('protocol-relative image rejected', '![x](//evil.test/x.png)', '<img');
 excludes('onerror break-out not emitted', '![x](/uploads/images/gallery/x.png" onerror="alert(1))', 'onerror="alert(1)"');
 contains('image wins over a link on the same text', '![diagram](/uploads/images/gallery/d.png)', '<img');
 check('safeImageSrc allows gallery path', safeImageSrc('/uploads/images/gallery/a.png') === '/uploads/images/gallery/a.png');
+check('safeImageSrc rewrites s3 to a wiki path', safeImageSrc('https://bucket.s3.amazonaws.com/uploads/images/gallery/a.png') === '/uploads/images/gallery/a.png');
 check('safeImageSrc rejects javascript', safeImageSrc('javascript:x') === null);
 
 section('Links');

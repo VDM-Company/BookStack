@@ -132,7 +132,7 @@ class ChatController extends Controller
             ),
         );
 
-        return response()->stream(function () use ($agent, $config, $history, $question, $system): void {
+        return new SseResponse(function () use ($agent, $config, $history, $question, $system): void {
             // The default 30s limit would kill a long research run mid-answer.
             @set_time_limit($config->timeout() + 30);
 
@@ -158,14 +158,7 @@ class ChatController extends Controller
                 } catch (\Throwable) {
                 }
             }
-        }, 200, [
-            'Content-Type' => 'text/event-stream; charset=utf-8',
-            'Cache-Control' => 'no-cache, no-store, no-transform, private',
-            'Connection' => 'keep-alive',
-            // Stops nginx / Cloudways from gzipping or buffering the stream.
-            'X-Accel-Buffering' => 'no',
-            'Content-Encoding' => 'none',
-        ]);
+        });
     }
 
     protected function applyRateLimit(User $user, Config $config): ?JsonResponse

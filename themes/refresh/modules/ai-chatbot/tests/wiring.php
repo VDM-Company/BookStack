@@ -47,6 +47,7 @@ foreach ([
     BookStack\Entities\Tools\Markdown\HtmlToMarkdown::class => ['convert'],
     BookStack\Http\HttpRequestService::class => ['buildClient'],
     BookStack\Uploads\Image::class => [],
+    BookStack\Uploads\ImageService::class => ['streamImageFromStorageResponse'],
     BookStack\Uploads\Attachment::class => ['getUrl'],
 ] as $class => $methods) {
     $short = class_basename($class);
@@ -136,6 +137,10 @@ $checks->that(
     'client-error route exists',
     $routes->contains(fn ($route) => $route->uri() === 'ai-chat/client-error'),
 );
+$checks->that(
+    'image stream route exists',
+    $routes->contains(fn ($route) => $route->uri() === 'ai-chat/image/{path}'),
+);
 
 $message = $routes->first(fn ($route) => $route->uri() === 'ai-chat/message');
 $middleware = $message ? $message->gatherMiddleware() : [];
@@ -144,6 +149,8 @@ $checks->same('message accepts POST only', ['POST'], $message ? $message->method
 $checks->that('runs in the web middleware group', in_array('web', $middleware, true), implode(', ', $middleware));
 $checks->that('requires authentication', in_array('auth', $middleware, true));
 $checks->that('controller class loads', class_exists(BookStackAiChat\Http\ChatController::class));
+$checks->that('SSE response class loads', class_exists(BookStackAiChat\Http\SseResponse::class));
+$checks->that('image controller class loads', class_exists(BookStackAiChat\Http\ImageController::class));
 $checks->that('error reporter loads', class_exists(BookStackAiChat\ErrorReport::class));
 
 $checks->finish();

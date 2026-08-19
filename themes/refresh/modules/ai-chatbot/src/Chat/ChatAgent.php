@@ -48,6 +48,12 @@ class ChatAgent
                 break;
             }
 
+            // Visible before the API round-trip. Research turns often emit
+            // only tool_use (no text); without this the widget stays on
+            // "Working…" until the final answer if the stream is even
+            // reaching the browser.
+            $emit('status', ['state' => 'thinking']);
+
             // Tools on steps 1..maxSteps-1 only. The last turn is answer-only
             // (empty tools omit the payload key) so a lookup-happy model still
             // has to write from what it already read. maxSteps of 1 means the

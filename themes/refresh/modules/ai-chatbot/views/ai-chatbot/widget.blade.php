@@ -8,6 +8,12 @@
      */
     $aiChatConfig = \BookStackAiChat\Config::instance();
     $aiChatVisible = \BookStackAiChat\Access::allows(user(), $aiChatConfig);
+    $aiChatStorageUrl = config('filesystems.url');
+    $aiChatStorageHost = '';
+    if (is_string($aiChatStorageUrl) && $aiChatStorageUrl !== '' && strtolower($aiChatStorageUrl) !== 'false') {
+        $aiChatStorageHost = (string) (parse_url($aiChatStorageUrl, PHP_URL_HOST) ?? '');
+    }
+    $aiChatImageProxy = config('filesystems.images') === 's3' || $aiChatStorageHost !== '';
 @endphp
 
 @if($aiChatVisible)
@@ -17,6 +23,8 @@
          class="print-hidden"
          data-endpoint="{{ url('/ai-chat/message') }}"
          data-report-endpoint="{{ url('/ai-chat/client-error') }}"
+         data-image-base="{{ $aiChatImageProxy ? url('/ai-chat/image') : '' }}"
+         data-storage-host="{{ $aiChatStorageHost }}"
          data-app-name="{{ setting('app-name') }}"
          data-strings="{{ json_encode(trans('aichat')) }}"></div>
 

@@ -49,8 +49,9 @@ class ContentText
 
         // Draw.io blocks survive HtmlToMarkdown as raw <img> tags; turn those
         // (and any other leftover HTML images) into markdown the model can cite.
+        // S3 / STORAGE_URL hosts are rewritten to /uploads/images/... here too.
         try {
-            $markdown = PageImages::replaceHtmlImages($markdown);
+            $markdown = PageImages::rewriteEmbeddedImages($markdown);
         } catch (\Throwable) {
         }
 

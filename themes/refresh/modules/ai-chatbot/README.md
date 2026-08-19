@@ -149,6 +149,24 @@ Server-side, the response is a `StreamedResponse`, whose callback runs after
 all middleware has returned. The session lock is therefore already released, so
 a long answer does not block the user's other requests.
 
+Production (Cloudflare + Cloudways nginx) will hold the body until the
+assistant finishes unless every layer is told not to. `SseResponse` re-applies
+`Cache-Control: … no-transform`, `Content-Encoding: identity` and
+`X-Accel-Buffering: no` at send time, because BookStack's global
+`PreventResponseCaching` middleware overwrites `Cache-Control` on the way out
+and would strip `no-transform`. `identity` is the RFC encoding; `none` is
+invalid and some edges strip it, then gzip/brotli the stream (which cannot
+flush incrementally). A 32KB SSE-comment pad is flushed first so an 8k nginx
+buffer cannot sit full and wait for close. Local Docker has none of those
+layers, which is why tokens already appear there as they are written.
+
+If production still dumps the whole answer at once after this, gzip is still
+on in front of PHP: Cloudflare **Speed → Optimization → Brotli** off for the
+host, or a Configuration Rule matching `https://wiki.globiz.jp/ai-chat/message`
+that disables compression; on Cloudways, turn gzip off for that path (or
+confirm nginx honours `X-Accel-Buffering: no`). The widget already paints
+`delta` events as they arrive and does not wait for `done`.
+
 ### Conversation state
 
 History lives in the browser's `sessionStorage` and is replayed with each

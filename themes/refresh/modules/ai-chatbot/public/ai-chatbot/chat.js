@@ -10,6 +10,14 @@
 const STORAGE_KEY = 'bookstack-ai-chat';
 const MAX_STORED = 40;
 
+let imageBase = '';
+let storageHost = '';
+
+function configureImages(root) {
+    imageBase = String((root && root.dataset && root.dataset.imageBase) || '').replace(/\/$/, '');
+    storageHost = String((root && root.dataset && root.dataset.storageHost) || '').toLowerCase();
+}
+
 // BookStack's theme-asset MIME sniffer (WebSafeMimeSniffer) runs finfo on
 // this file. A `.js` file is only remapped to text/javascript when finfo
 // reports text/plain. HTML tag literals anywhere in the source make it
@@ -43,14 +51,44 @@ function safeHref(href) {
     return /^(https?:\/\/|\/(?!\/)|#)/i.test(href) ? href : null;
 }
 
+function isStorageHost(host) {
+    host = String(host || '').toLowerCase();
+    if (!host) return false;
+    if (storageHost && host === storageHost) return true;
+    return /\.s3(?:[.-][a-z0-9-]+)?\.amazonaws\.com$/.test(host)
+        || /^s3(?:[.-][a-z0-9-]+)?\.amazonaws\.com$/.test(host);
+}
+
+function rewriteWikiImageUrl(href) {
+    if (!/^https?:\/\//i.test(href)) return href;
+    try {
+        const parsed = new URL(href);
+        if (!isStorageHost(parsed.hostname)) return href;
+        const match = parsed.pathname.match(/\/uploads\/images\/[A-Za-z0-9._/-]+/);
+        return match ? match[0] : href;
+    } catch (error) {
+        return href;
+    }
+}
+
+function displayImageSrc(href) {
+    const path = safeImageSrc(href);
+    if (!path) return null;
+    if (imageBase && path.includes('/uploads/images/')) {
+        return imageBase + path.slice(path.indexOf('/uploads/images/'));
+    }
+    return path;
+}
+
 /**
  * Only same-origin BookStack gallery/draw.io paths and attachment downloads.
+ * S3 / STORAGE_URL hosts are rewritten to /uploads/images/... first.
  * Model-invented hosts, data URIs and path traversal never become an img src.
  */
 function safeImageSrc(href) {
     if (typeof href !== 'string' || href === '') return null;
 
-    const raw = href.replace(/&amp;/g, '&');
+    const raw = rewriteWikiImageUrl(href.replace(/&amp;/g, '&'));
     if (/^(javascript|data|vbscript|file):/i.test(raw) || raw.startsWith('//')) {
         return null;
     }
@@ -86,7 +124,7 @@ function safeImageSrc(href) {
 
 function inlineFormat(text) {
     let out = text.replace(/!\[([^\]\n]*)]\(([^)\s]+)\)/g, (match, alt, href) => {
-        const url = safeImageSrc(href);
+        const url = displayImageSrc(href);
         if (!url) return match;
         return openTag('img', `src="${esc(url)}" alt="${alt}" loading="lazy"`);
     });
@@ -376,6 +414,7 @@ class Chatbot {
         this.root = root;
         this.endpoint = root.dataset.endpoint;
         this.reportEndpoint = root.dataset.reportEndpoint || '';
+        configureImages(root);
         this.lastFailure = null;
         this.appName = root.dataset.appName || '';
         this.strings = this.readStrings(root.dataset.strings);
@@ -735,9 +774,10 @@ class Chatbot {
         const text = String(markdown || '');
 
         return (Array.isArray(images) ? images : []).filter(image => {
-            const url = safeImageSrc(image && image.url);
+            const url = displayImageSrc(image && image.url);
             if (!url) return false;
-            return !text.includes(url) && !text.includes(String(image.url || ''));
+            const raw = String(image.url || '');
+            return !text.includes(url) && !text.includes(raw);
         });
     }
 
@@ -747,7 +787,7 @@ class Chatbot {
         list.setAttribute('aria-label', this.t('images'));
 
         images.forEach(image => {
-            const url = safeImageSrc(image.url);
+            const url = displayImageSrc(image.url);
             if (!url) return;
 
             const figure = document.createElement('figure');

@@ -12,6 +12,7 @@ use BookStack\Theming\ThemeEvents;
 use BookStack\Theming\ThemeViews;
 use BookStackAiChat\Config;
 use BookStackAiChat\Http\ChatController;
+use BookStackAiChat\Http\ImageController;
 use Illuminate\Routing\Router;
 
 /**
@@ -41,6 +42,9 @@ Theme::listen(ThemeEvents::ROUTES_REGISTER_WEB_AUTH, function (Router $router): 
     $router->group(['prefix' => 'ai-chat'], function (Router $router): void {
         $router->post('/message', [ChatController::class, 'message'])->name('ai-chat.message');
         $router->get('/client-error', [ChatController::class, 'clientError'])->name('ai-chat.client-error');
+        $router->get('/image/{path}', [ImageController::class, 'show'])
+            ->where('path', 'uploads/images/.+')
+            ->name('ai-chat.image');
     });
 });
 

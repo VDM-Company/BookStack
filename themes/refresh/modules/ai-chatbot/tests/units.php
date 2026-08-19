@@ -106,6 +106,7 @@ $checks->that('omits the fence only for a pure error or refusal', str_contains($
 $checks->that('omits page context when there is none', !str_contains(Prompt::build($config, null, []), 'currently viewing'));
 $checks->that('tells the model to embed wiki images', str_contains($prompt, '![caption](url)'));
 $checks->that('forbids inventing image URLs', str_contains($prompt, 'Do not invent, guess or rewrite image URLs'));
+$checks->that('skips editable-source images', str_contains($prompt, 'editable source'));
 
 $checks->section('Page image extraction');
 
@@ -153,8 +154,74 @@ $checks->same('rejects data URLs', null, PageImages::sanitiseUrl('data:image/png
 $checks->same('rejects protocol-relative URLs', null, PageImages::sanitiseUrl('//evil.test/x.png'));
 $checks->same('rejects off-site hosts', null, PageImages::sanitiseUrl('https://evil.test/uploads/images/gallery/x.png'));
 $checks->same('rejects path traversal', null, PageImages::sanitiseUrl('/uploads/images/../secrets/x.png'));
+$checks->same('rejects a drawio source file', null, PageImages::sanitiseUrl('/uploads/images/gallery/flow.drawio'));
 $checks->same('allows an attachment preview', '/attachments/12?open=true', PageImages::sanitiseUrl('/attachments/12?open=true'));
 $checks->same('rejects a non-image attachment query', null, PageImages::sanitiseUrl('/attachments/12?open=false'));
+
+$s3Expected = '/uploads/images/gallery/2026-08/uMYr887hjyJHjW2i-fault-triage.png';
+$s3Virtual = 'https://bookstack-wiki-vdmjp-s3-bucket.s3.amazonaws.com/uploads/images/gallery/2026-08/uMYr887hjyJHjW2i-fault-triage.png';
+$checks->same('rewrites virtual-hosted S3', $s3Expected, PageImages::sanitiseUrl($s3Virtual));
+$checks->same(
+    'rewrites regional virtual-hosted S3',
+    $s3Expected,
+    PageImages::sanitiseUrl('https://bookstack-wiki-vdmjp-s3-bucket.s3.ap-northeast-1.amazonaws.com/uploads/images/gallery/2026-08/uMYr887hjyJHjW2i-fault-triage.png'),
+);
+$checks->same(
+    'rewrites path-style S3',
+    $s3Expected,
+    PageImages::sanitiseUrl('https://s3.amazonaws.com/bookstack-wiki-vdmjp-s3-bucket/uploads/images/gallery/2026-08/uMYr887hjyJHjW2i-fault-triage.png'),
+);
+$checks->same(
+    'rewrites regional path-style S3',
+    $s3Expected,
+    PageImages::sanitiseUrl('https://s3.ap-northeast-1.amazonaws.com/bookstack-wiki-vdmjp-s3-bucket/uploads/images/gallery/2026-08/uMYr887hjyJHjW2i-fault-triage.png'),
+);
+$checks->same(
+    'rewrites older s3-region path-style S3',
+    $s3Expected,
+    PageImages::sanitiseUrl('https://s3-ap-northeast-1.amazonaws.com/bookstack-wiki-vdmjp-s3-bucket/uploads/images/gallery/2026-08/uMYr887hjyJHjW2i-fault-triage.png'),
+);
+$checks->that('rewritten S3 URL has no amazonaws host', !str_contains((string) PageImages::sanitiseUrl($s3Virtual), 'amazonaws.com'));
+
+$fromS3Html = PageImages::extract('<img src="' . $s3Virtual . '" alt="Triage">');
+$checks->same('HTML S3 src becomes a wiki path', $s3Expected, $fromS3Html[0]['url'] ?? null);
+
+$previousStorageUrl = config('filesystems.url');
+config(['filesystems.url' => 'https://cdn.assets.test/wiki']);
+$checks->same(
+    'rewrites STORAGE_URL host to a wiki path',
+    '/uploads/images/gallery/2026-08/x.png',
+    PageImages::sanitiseUrl('https://cdn.assets.test/wiki/uploads/images/gallery/2026-08/x.png'),
+);
+config(['filesystems.url' => $previousStorageUrl]);
+
+$mixed = PageImages::extract(
+    '<img src="/uploads/images/gallery/2026-08/seven-day-clocks.svg" alt="seven-day-clocks.svg (editable source)">'
+    . '<img src="/uploads/images/gallery/2026-08/seven-day-clocks.png" alt="seven-day-clocks.png">'
+    . '<img src="/uploads/images/gallery/2026-08/fault-triage.svg" alt="fault-triage.svg (editable source)">'
+    . '<img src="/uploads/images/gallery/2026-08/fault-triage.png" alt="fault-triage.png">',
+    '',
+    8,
+);
+$checks->same('skips editable-source SVGs', 2, count($mixed));
+$checks->same('keeps the png preview', '/uploads/images/gallery/2026-08/seven-day-clocks.png', $mixed[0]['url'] ?? null);
+$checks->same('keeps the second png', '/uploads/images/gallery/2026-08/fault-triage.png', $mixed[1]['url'] ?? null);
+$checks->that(
+    'editable-source label is not in the extract',
+    !str_contains(json_encode($mixed), 'editable source'),
+);
+
+$pair = PageImages::extract(
+    '<img src="/uploads/images/gallery/flow.svg" alt="Flow">'
+    . '<img src="/uploads/images/gallery/flow.png" alt="Flow">',
+    '',
+    8,
+);
+$checks->same('prefers raster over source SVG', 1, count($pair));
+$checks->same('kept raster is the png', '/uploads/images/gallery/flow.png', $pair[0]['url'] ?? null);
+
+$icon = PageImages::extract('<img src="/uploads/images/gallery/logo.svg" alt="Logo">');
+$checks->same('keeps a lone SVG icon', '/uploads/images/gallery/logo.svg', $icon[0]['url'] ?? null);
 
 $replaced = PageImages::replaceHtmlImages(
     'Before <img src="/uploads/images/drawio/2024-01/n.png" alt="Net"> after'
@@ -163,6 +230,21 @@ $checks->same(
     'leftover HTML images become markdown',
     'Before ![Net](/uploads/images/drawio/2024-01/n.png) after',
     $replaced,
+);
+$checks->same(
+    'S3 HTML image becomes markdown path',
+    'See ![Net](/uploads/images/drawio/2024-01/n.png)',
+    PageImages::replaceHtmlImages('See <img src="https://x.s3.amazonaws.com/uploads/images/drawio/2024-01/n.png" alt="Net">'),
+);
+$checks->same(
+    'S3 markdown image becomes a path',
+    'See ![Net](/uploads/images/drawio/2024-01/n.png)',
+    PageImages::rewriteEmbeddedImages('See ![Net](https://x.s3.amazonaws.com/uploads/images/drawio/2024-01/n.png)'),
+);
+$checks->same(
+    'editable-source HTML image is dropped',
+    'Before  after',
+    PageImages::replaceHtmlImages('Before <img src="/uploads/images/gallery/a.svg" alt="a.svg (editable source)"> after'),
 );
 
 $listed = PageImages::formatForModel([
@@ -174,6 +256,7 @@ $checks->that('model listing forbids invented URLs', str_contains($listed, 'do n
 $checks->same('empty listing is blank', '', PageImages::formatForModel([]));
 $checks->same('empty page extract is safe', [], PageImages::extract('', '', 4));
 $checks->same('replaceHtmlImages on empty text is safe', '', PageImages::replaceHtmlImages(''));
+$checks->same('rewriteEmbeddedImages on empty text is safe', '', PageImages::rewriteEmbeddedImages(''));
 
 $agent = file_get_contents(dirname(__DIR__) . '/src/Chat/ChatAgent.php');
 $checks->that(
@@ -299,18 +382,62 @@ $checks->that(
 );
 $streamSource = (string) file_get_contents(dirname(__DIR__) . '/src/Http/EventStream.php');
 $checks->that(
-    'stream primes proxies with an 8KB SSE comment',
-    str_contains($streamSource, 'function prime') && str_contains($streamSource, '8192'),
+    'stream primes proxies with more than an 8KB SSE comment',
+    str_contains($streamSource, 'function prime') && str_contains($streamSource, '32768'),
 );
 $checks->that(
     'controller primes the stream before the agent runs',
     is_string($controller) && str_contains($controller, '$stream->prime()'),
 );
 $checks->that(
-    'SSE response asks proxies not to gzip or transform',
-    is_string($controller)
-        && str_contains($controller, 'no-transform')
-        && str_contains($controller, "'Content-Encoding' => 'none'"),
+    'controller returns an SseResponse so headers survive middleware',
+    is_string($controller) && str_contains($controller, 'new SseResponse'),
+);
+$checks->that(
+    'SSE encoding is identity, not the invalid token none',
+    str_contains($streamSource, "'Content-Encoding' => 'identity'")
+        && !str_contains($streamSource, "'Content-Encoding' => 'none'")
+        && !str_contains((string) $controller, "'Content-Encoding' => 'none'"),
+);
+$checks->that(
+    'zlib compression is disabled before the body starts',
+    str_contains($streamSource, "ini_set('zlib.output_compression', '0'")
+        && str_contains($streamSource, 'ob_end_clean'),
+);
+$checks->that(
+    'every SSE write flushes PHP and any leftover output buffer',
+    str_contains($streamSource, 'function writeRaw')
+        && str_contains($streamSource, 'ob_flush')
+        && str_contains($streamSource, 'flush()'),
+);
+
+$sse = new \BookStackAiChat\Http\SseResponse(static function (): void {
+});
+$sse->headers->set('Cache-Control', 'no-cache, no-store, private');
+$sse->headers->set('Content-Length', '999');
+$sse->applyUnbufferedHeaders();
+$checks->that(
+    'SseResponse restores no-transform after PreventResponseCaching',
+    str_contains((string) $sse->headers->get('Cache-Control'), 'no-transform'),
+);
+$checks->same('SseResponse Content-Encoding', 'identity', $sse->headers->get('Content-Encoding'));
+$checks->same('SseResponse X-Accel-Buffering', 'no', $sse->headers->get('X-Accel-Buffering'));
+$checks->same('SseResponse has no Content-Length', false, $sse->headers->has('Content-Length'));
+
+$js = (string) file_get_contents(dirname(__DIR__) . '/public/ai-chatbot/chat.js');
+$checks->that(
+    'widget paints delta events as they arrive',
+    str_contains($js, "name === 'delta'") && str_contains($js, 'appendText('),
+);
+$checks->that(
+    'widget does not wait for a done event to paint text',
+    !preg_match('/name\s*===\s*[\'"]done[\'"]/', $js),
+);
+
+$agentSource = (string) file_get_contents(dirname(__DIR__) . '/src/Chat/ChatAgent.php');
+$checks->that(
+    'agent emits a thinking status before each model turn',
+    substr_count($agentSource, "emit('status', ['state' => 'thinking'])") >= 2,
 );
 
 $checks->section('ApiException user messages');
