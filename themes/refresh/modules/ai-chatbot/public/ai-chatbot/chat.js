@@ -366,6 +366,34 @@ function pickFallbackFollowUps(candidates, lastUser, limit = 3) {
         .slice(0, limit);
 }
 
+/* ------------------------------------------------------------------ failures */
+
+// Statuses where a proxy, not the app, wrote the body. Cloudflare's own 5xx
+// pages are HTML, so there is never a useful message to show.
+const GATEWAY_STATUSES = [502, 503, 504, 520, 521, 522, 523, 524, 525, 526];
+
+/**
+ * Translation key for a failed request, or '' to show the body's own
+ * `message` instead.
+ *
+ * 401 and 419 bodies come from Laravel rather than this module. A session
+ * that has aged past SESSION_LIFETIME answers the POST with 419 and
+ * `{"message": "CSRF token mismatch."}`, which names a mechanism the reader
+ * cannot act on, so those two statuses always win over the body. Every other
+ * status either carries a message this module wrote on purpose (403 access,
+ * 422 validation, 429 limit, 503 not configured) or falls back by status.
+ */
+function errorKey(status, hasServerMessage) {
+    if (status === 401 || status === 419) return 'error_session';
+    if (hasServerMessage) return '';
+    if (status === 429) return 'error_rate';
+    if (status === 404 || status === 405) return 'error_unavailable';
+    if (GATEWAY_STATUSES.includes(status)) return 'error_gateway';
+    if (status >= 500) return 'error_server';
+
+    return 'error_generic';
+}
+
 /* --------------------------------------------------------------------- icons */
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
@@ -414,6 +442,7 @@ class Chatbot {
         this.root = root;
         this.endpoint = root.dataset.endpoint;
         this.reportEndpoint = root.dataset.reportEndpoint || '';
+        this.tokenEndpoint = root.dataset.tokenEndpoint || '';
         configureImages(root);
         this.lastFailure = null;
         this.appName = root.dataset.appName || '';
@@ -986,27 +1015,21 @@ class Chatbot {
         };
 
         try {
-            const response = await fetch(this.endpoint, {
-                method: 'POST',
-                credentials: 'same-origin',
-                signal: this.controller.signal,
-                headers: {
-                    'Content-Type': 'application/json',
-                    // JSON first so Laravel 4xx/5xx pages come back as
-                    // `{message: ...}` instead of HTML the catch-all cannot read.
-                    'Accept': 'application/json, text/event-stream',
-                    'X-CSRF-TOKEN': document.querySelector('meta[name="token"]')?.content || '',
-                    'X-Requested-With': 'XMLHttpRequest',
-                },
-                body: JSON.stringify({
-                    message: question,
-                    history: this.messages.slice(0, -1).map(m => ({
-                        role: m.role,
-                        content: splitFollowUps(m.content).text,
-                    })),
-                    context: {title: this.pageTitle(), url: window.location.href},
-                }),
-            });
+            let response = await this.post(question, this.csrfToken());
+
+            // The page's token is minted when the HTML is rendered, so a tab
+            // left open past SESSION_LIFETIME still holds the old one. Laravel
+            // rebuilds the session, mints a fresh token and answers 419. One
+            // refresh-and-retry recovers that silently whenever the account is
+            // still signed in; if it is not, the retry comes back 401 and
+            // errorFrom() asks the reader to reload.
+            if (response.status === 419) {
+                const refreshed = await this.refreshCsrfToken();
+
+                if (refreshed !== '') {
+                    response = await this.post(question, refreshed);
+                }
+            }
 
             if (!response.ok) {
                 throw new Error(await this.errorFrom(response));
@@ -1106,6 +1129,75 @@ class Chatbot {
         }
     }
 
+    post(question, token) {
+        return fetch(this.endpoint, {
+            method: 'POST',
+            credentials: 'same-origin',
+            signal: this.controller.signal,
+            headers: {
+                'Content-Type': 'application/json',
+                // JSON first so Laravel 4xx/5xx pages come back as
+                // `{message: ...}` instead of HTML the catch-all cannot read.
+                'Accept': 'application/json, text/event-stream',
+                'X-CSRF-TOKEN': token,
+                'X-Requested-With': 'XMLHttpRequest',
+            },
+            body: JSON.stringify({
+                message: question,
+                history: this.messages.slice(0, -1).map(m => ({
+                    role: m.role,
+                    content: splitFollowUps(m.content).text,
+                })),
+                context: {title: this.pageTitle(), url: window.location.href},
+            }),
+        });
+    }
+
+    /**
+     * The token BookStack rendered into this page. Read per send rather than
+     * cached at construction, so a refresh below is picked up straight away.
+     */
+    csrfToken() {
+        return document.querySelector('meta[name="token"]')?.content || '';
+    }
+
+    /**
+     * Ask the server for the current session's token. Returns '' when the
+     * session is genuinely gone, which is the signal to stop retrying.
+     */
+    async refreshCsrfToken() {
+        if (!this.tokenEndpoint) return '';
+
+        try {
+            const response = await fetch(this.tokenEndpoint, {
+                method: 'GET',
+                credentials: 'same-origin',
+                cache: 'no-store',
+                signal: this.controller ? this.controller.signal : undefined,
+                headers: {
+                    'Accept': 'application/json',
+                    // Makes BookStack answer 401 instead of redirecting to the
+                    // login page, so a dead session is easy to tell apart.
+                    'X-Requested-With': 'XMLHttpRequest',
+                },
+            });
+
+            if (!response.ok) return '';
+
+            const data = await response.json();
+            const token = data && typeof data.token === 'string' ? data.token : '';
+
+            // Write it back so the rest of the page recovers too: every
+            // BookStack form on this tab is carrying the same stale token.
+            const meta = token === '' ? null : document.querySelector('meta[name="token"]');
+            if (meta) meta.content = token;
+
+            return token;
+        } catch (error) {
+            return '';
+        }
+    }
+
     parseEvent(block) {
         let name = '';
         let raw = '';
@@ -1128,7 +1220,6 @@ class Chatbot {
     }
 
     async errorFrom(response) {
-        const generic = this.t('error_generic');
         const contentType = response.headers.get('content-type') || '';
         let preview = '';
         let message = '';
@@ -1150,19 +1241,9 @@ class Chatbot {
 
         this.lastFailure = {status: response.status, contentType, preview};
 
-        if (message) {
-            return message;
-        }
+        const key = errorKey(response.status, message !== '');
 
-        if (response.status === 419) return this.t('error_session');
-        if (response.status === 429) return this.t('error_rate');
-        if (response.status === 404 || response.status === 405) return this.t('error_unavailable');
-        if ([502, 503, 504, 520, 521, 522, 523, 524, 525, 526].includes(response.status)) {
-            return this.t('error_gateway');
-        }
-        if (response.status >= 500) return this.t('error_server');
-
-        return generic;
+        return key === '' ? message : this.t(key);
     }
 
     reportFailure(error) {

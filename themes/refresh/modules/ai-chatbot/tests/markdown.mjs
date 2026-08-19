@@ -26,8 +26,8 @@ if (cut === -1) {
 
 globalThis.window = {location: {origin: 'https://wiki.test'}};
 
-const module = `${source.slice(0, cut)}\nexport {renderMarkdown, esc, safeHref, safeImageSrc, splitFollowUps, resolveFollowUps, pickFallbackFollowUps};`;
-const {renderMarkdown, esc, safeHref, safeImageSrc, splitFollowUps, resolveFollowUps, pickFallbackFollowUps} = await import(`data:text/javascript,${encodeURIComponent(module)}`);
+const module = `${source.slice(0, cut)}\nexport {renderMarkdown, esc, safeHref, safeImageSrc, splitFollowUps, resolveFollowUps, pickFallbackFollowUps, errorKey};`;
+const {renderMarkdown, esc, safeHref, safeImageSrc, splitFollowUps, resolveFollowUps, pickFallbackFollowUps, errorKey} = await import(`data:text/javascript,${encodeURIComponent(module)}`);
 
 let failures = 0;
 let total = 0;
@@ -199,6 +199,26 @@ section('Follow-up fence');
     const capped = pickFallbackFollowUps(pool, '', 3);
     check('fallback shows three chips', capped.length === 3 && capped[0] === howto);
 }
+
+section('Failure messages');
+// A session that ages past SESSION_LIFETIME makes Laravel mint a new token and
+// answer the POST with 419 and `{"message": "CSRF token mismatch."}`. Showing
+// that body verbatim is the bug this covers: the reader needs to be told to
+// reload, not told the name of a framework check.
+check('419 ignores the framework body', errorKey(419, true) === 'error_session', errorKey(419, true));
+check('419 without a body still asks for a reload', errorKey(419, false) === 'error_session');
+check('401 is treated as an expired session', errorKey(401, true) === 'error_session');
+check('403 keeps the access message this module wrote', errorKey(403, true) === '');
+check('422 keeps the validation message', errorKey(422, true) === '');
+check('429 keeps the rate-limit message', errorKey(429, true) === '');
+check('429 without a body falls back by status', errorKey(429, false) === 'error_rate');
+check('503 keeps the not-configured message', errorKey(503, true) === '');
+check('405 without a body reads as unavailable', errorKey(405, false) === 'error_unavailable');
+check('404 without a body reads as unavailable', errorKey(404, false) === 'error_unavailable');
+check('cloudflare 520 reads as a gateway failure', errorKey(520, false) === 'error_gateway');
+check('524 reads as a gateway failure', errorKey(524, false) === 'error_gateway');
+check('500 without a body reads as a server error', errorKey(500, false) === 'error_server');
+check('an odd 4xx falls back to generic', errorKey(418, false) === 'error_generic');
 
 section('Helpers');
 check('esc covers all five entities', esc(`&<>"'`) === '&amp;&lt;&gt;&quot;&#39;', esc(`&<>"'`));

@@ -113,9 +113,10 @@ themes/<theme>/modules/ai-chatbot/
 
 Four theme-system mechanisms carry the whole feature:
 
-**1. `ROUTES_REGISTER_WEB_AUTH`** registers `POST /ai-chat/message` inside
+**1. `ROUTES_REGISTER_WEB_AUTH`** registers every `/ai-chat/…` route inside
 BookStack's `web` + `auth` middleware, so session auth, CSRF and email
-confirmation are enforced by the framework rather than reimplemented.
+confirmation are enforced by the framework rather than reimplemented. Only
+`/message` is a POST; `/token`, `/client-error` and `/image/{path}` are GETs.
 
 **2. `THEME_REGISTER_VIEWS`** inserts the widget after
 `layouts.parts.base-body-end`, which sits just inside `</body>` in the layout
@@ -131,6 +132,33 @@ served as `text/plain`, which browsers then refuse to execute as a module.
 
 **4. A PSR-4 autoloader** registered in `functions.php`, because theme modules
 sit outside Composer's autoload map.
+
+### Expired sessions
+
+The widget sits on every page, and a wiki tab is routinely left open for a day.
+`<meta name="token">` is minted when the HTML is rendered, so once the session
+ages past `SESSION_LIFETIME` (120 minutes by default) Laravel reads the session
+back empty, mints a fresh CSRF token and answers the widget's POST with 419 and
+the body `{"message": "CSRF token mismatch."}`.
+
+Two things keep that from reaching the reader:
+
+- `GET /ai-chat/token` returns the live token. On a 419 the widget fetches it,
+  writes it back into the page's meta tag — which also un-sticks BookStack's own
+  forms on that tab — and retries the send once. With a remember-me cookie the
+  account is signed back in and the retry succeeds silently.
+- When the session cannot be restored, that same request is answered 401 and the
+  widget shows `error_session` ("Your session expired…") instead. 401 and 419
+  bodies are written by Laravel, so `errorKey()` in `chat.js` always prefers the
+  module's own wording for those two statuses.
+
+The endpoints are emitted as root-relative paths (`Module::path()`), not
+absolute URLs. The widget fetches with `credentials: 'same-origin'`, and an
+absolute URL built from an `APP_URL` whose scheme or host does not match the
+browser's counts as a different origin: no session cookie is sent and every
+POST is a CSRF mismatch. Do not put `url()` back in the widget's `data-`
+attributes. CSRF protection itself stays on — no `/ai-chat/` path belongs in
+`VerifyCsrfToken::$except`, and `wiring.php` asserts that.
 
 ### Streaming
 

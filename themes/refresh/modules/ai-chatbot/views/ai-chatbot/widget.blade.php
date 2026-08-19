@@ -21,9 +21,10 @@
 
     <div id="ai-chatbot"
          class="print-hidden"
-         data-endpoint="{{ url('/ai-chat/message') }}"
-         data-report-endpoint="{{ url('/ai-chat/client-error') }}"
-         data-image-base="{{ $aiChatImageProxy ? url('/ai-chat/image') : '' }}"
+         data-endpoint="{{ \BookStackAiChat\Module::path('/ai-chat/message') }}"
+         data-token-endpoint="{{ \BookStackAiChat\Module::path('/ai-chat/token') }}"
+         data-report-endpoint="{{ \BookStackAiChat\Module::path('/ai-chat/client-error') }}"
+         data-image-base="{{ $aiChatImageProxy ? \BookStackAiChat\Module::path('/ai-chat/image') : '' }}"
          data-storage-host="{{ $aiChatStorageHost }}"
          data-app-name="{{ setting('app-name') }}"
          data-strings="{{ json_encode(trans('aichat')) }}"></div>

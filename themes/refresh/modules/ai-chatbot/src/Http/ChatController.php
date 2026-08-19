@@ -78,6 +78,26 @@ class ChatController extends Controller
     }
 
     /**
+     * The current session's CSRF token.
+     *
+     * A wiki tab is often left open for a day. Once the session ages past
+     * SESSION_LIFETIME, Laravel reads it back empty, mints a new token and
+     * answers the widget's POST with 419 "CSRF token mismatch." — wording
+     * that means nothing to the reader. The widget calls this to pick up the
+     * live token and retry once.
+     *
+     * GET, so it needs no token itself, and auth-gated by the route group:
+     * an expired session that cannot be restored from a remember-me cookie
+     * gets 401 here, which is the widget's cue to ask for a reload. The value
+     * is the same one BookStack already renders into every page this user
+     * loads, so exposing it to that user reveals nothing new.
+     */
+    public function token(): JsonResponse
+    {
+        return response()->json(['token' => csrf_token()]);
+    }
+
+    /**
      * Browser-side failures (HTML 502/419, empty stream, JS throw) never hit
      * the SSE catch, so the widget reports them here. GET so a CSRF mismatch
      * on /message can still be recorded.

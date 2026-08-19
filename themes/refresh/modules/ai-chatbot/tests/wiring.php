@@ -141,6 +141,10 @@ $checks->that(
     'image stream route exists',
     $routes->contains(fn ($route) => $route->uri() === 'ai-chat/image/{path}'),
 );
+$checks->that(
+    'token refresh route exists',
+    $routes->contains(fn ($route) => $route->uri() === 'ai-chat/token'),
+);
 
 $message = $routes->first(fn ($route) => $route->uri() === 'ai-chat/message');
 $middleware = $message ? $message->gatherMiddleware() : [];
@@ -148,7 +152,50 @@ $middleware = $message ? $message->gatherMiddleware() : [];
 $checks->same('message accepts POST only', ['POST'], $message ? $message->methods() : []);
 $checks->that('runs in the web middleware group', in_array('web', $middleware, true), implode(', ', $middleware));
 $checks->that('requires authentication', in_array('auth', $middleware, true));
+
+// The `web` group is what starts the session. Without it VerifyCsrfToken has
+// no session token to compare against and every POST is a 419, so pin the
+// middleware that actually has to be there rather than just the group name.
+$expanded = app('router')->getMiddlewareGroups()['web'] ?? [];
+$checks->that(
+    'web group starts the session',
+    in_array(BookStack\Http\Middleware\StartSessionExtended::class, $expanded, true),
+);
+$checks->that(
+    'web group verifies CSRF tokens',
+    in_array(BookStack\Http\Middleware\VerifyCsrfToken::class, $expanded, true),
+);
+// CSRF protection stays on: the fix is a token refresh in the widget, not an
+// exemption. Guard against anyone "fixing" a future 419 by listing the route.
+$except = (new ReflectionClass(BookStack\Http\Middleware\VerifyCsrfToken::class))
+    ->getDefaultProperties()['except'] ?? [];
+$exempt = array_filter($except, fn ($pattern) => str_contains((string) $pattern, 'ai-chat'));
+$checks->same('no ai-chat route is exempt from CSRF checks', [], array_values($exempt));
+
+// Every route the widget calls must be auth-gated: the image proxy streams
+// private wiki images, client-error writes to the log, and token hands out a
+// session's CSRF token.
+foreach (['ai-chat/token', 'ai-chat/client-error', 'ai-chat/image/{path}'] as $uri) {
+    $route = $routes->first(fn ($candidate) => $candidate->uri() === $uri);
+    $gathered = $route ? $route->gatherMiddleware() : [];
+
+    $checks->that("{$uri} runs in the web group", in_array('web', $gathered, true));
+    $checks->that("{$uri} requires authentication", in_array('auth', $gathered, true));
+    $checks->that("{$uri} is read-only", $route && in_array('GET', $route->methods(), true) && !in_array('POST', $route->methods(), true));
+}
+
+// Absolute URLs built from a stale APP_URL are a different origin to the
+// browser, so no session cookie is sent and the POST 419s. Paths cannot drift.
+foreach (['/ai-chat/message', '/ai-chat/token', '/ai-chat/client-error', '/ai-chat/image'] as $endpoint) {
+    $checks->that(
+        "Module::path('{$endpoint}') is root-relative",
+        str_starts_with(Module::path($endpoint), '/') && !str_contains(Module::path($endpoint), '://'),
+        Module::path($endpoint),
+    );
+}
+
 $checks->that('controller class loads', class_exists(BookStackAiChat\Http\ChatController::class));
+$checks->that('token action exists', method_exists(BookStackAiChat\Http\ChatController::class, 'token'));
 $checks->that('SSE response class loads', class_exists(BookStackAiChat\Http\SseResponse::class));
 $checks->that('image controller class loads', class_exists(BookStackAiChat\Http\ImageController::class));
 $checks->that('error reporter loads', class_exists(BookStackAiChat\ErrorReport::class));

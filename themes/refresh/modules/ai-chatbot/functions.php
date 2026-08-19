@@ -41,6 +41,7 @@ Theme::listen(ThemeEvents::ROUTES_REGISTER_WEB_AUTH, function (Router $router): 
     // when the key is missing.
     $router->group(['prefix' => 'ai-chat'], function (Router $router): void {
         $router->post('/message', [ChatController::class, 'message'])->name('ai-chat.message');
+        $router->get('/token', [ChatController::class, 'token'])->name('ai-chat.token');
         $router->get('/client-error', [ChatController::class, 'clientError'])->name('ai-chat.client-error');
         $router->get('/image/{path}', [ImageController::class, 'show'])
             ->where('path', 'uploads/images/.+')
