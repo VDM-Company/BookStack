@@ -33,10 +33,11 @@ spl_autoload_register(function (string $class): void {
 });
 
 Theme::listen(ThemeEvents::ROUTES_REGISTER_WEB_AUTH, function (Router $router): void {
-    if (!Config::instance()->configured()) {
-        return;
-    }
-
+    // Always register. Gating on configured() here meant a `route:cache` built
+    // without ANTHROPIC_API_KEY (or an old cached file left in bootstrap/cache)
+    // dropped POST /ai-chat/message. Laravel's GET fallback then 405s, which
+    // looks like "Supported methods: GET, HEAD". The controller still 503s
+    // when the key is missing.
     $router->group(['prefix' => 'ai-chat'], function (Router $router): void {
         $router->post('/message', [ChatController::class, 'message'])->name('ai-chat.message');
         $router->get('/client-error', [ChatController::class, 'clientError'])->name('ai-chat.client-error');

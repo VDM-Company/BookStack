@@ -13,6 +13,7 @@ use Illuminate\Validation\ValidationException;
 use Symfony\Component\ErrorHandler\Error\FatalError;
 use Symfony\Component\HttpFoundation\Response as SymfonyResponse;
 use Symfony\Component\HttpKernel\Exception\HttpExceptionInterface;
+use Symfony\Component\HttpKernel\Exception\MethodNotAllowedHttpException;
 use Throwable;
 
 class Handler extends ExceptionHandler
@@ -61,17 +62,20 @@ class Handler extends ExceptionHandler
     }
 
     /**
-     * Report or log an exception.
-     *
-     * @param Throwable $exception
-     *
-     * @return void
-     *@throws Throwable
-     *
+     * Laravel's default dontReport list includes HttpException, so a 405 on
+     * /ai-chat/message never reached the log or Sentry. Those are real
+     * production failures when the POST route is missing from a stale cache.
      */
-    public function report(Throwable $exception)
+    protected function shouldntReport(Throwable $e): bool
     {
-        parent::report($exception);
+        if ($e instanceof MethodNotAllowedHttpException) {
+            $path = request()?->path() ?? '';
+            if (str_starts_with($path, 'ai-chat')) {
+                return false;
+            }
+        }
+
+        return parent::shouldntReport($e);
     }
 
     /**

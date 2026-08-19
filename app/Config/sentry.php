@@ -16,7 +16,6 @@ use BookStack\Exceptions\StoppedAuthenticationException;
 use Illuminate\Auth\AuthenticationException;
 use Illuminate\Session\TokenMismatchException;
 use Illuminate\Validation\ValidationException;
-use Symfony\Component\HttpKernel\Exception\MethodNotAllowedHttpException;
 use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 
 return [
@@ -50,7 +49,6 @@ return [
 
     'ignore_exceptions' => [
         AuthenticationException::class,
-        MethodNotAllowedHttpException::class,
         NotFoundException::class,
         NotFoundHttpException::class,
         NotifyException::class,

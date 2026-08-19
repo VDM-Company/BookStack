@@ -121,7 +121,10 @@ $routes = collect(app('router')->getRoutes()->getRoutes())
     ->filter(fn($route) => str_starts_with($route->uri(), 'ai-chat'));
 
 if (!Config::instance()->configured()) {
-    $checks->same('no routes registered without an API key', 0, $routes->count());
+    $checks->that(
+        'message route still exists without an API key',
+        $routes->contains(fn ($route) => $route->uri() === 'ai-chat/message'),
+    );
     $checks->finish();
 }
 
