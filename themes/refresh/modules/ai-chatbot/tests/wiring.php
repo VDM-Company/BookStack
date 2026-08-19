@@ -1,0 +1,126 @@
+<?php
+
+/**
+ * Verifies the module is correctly attached to BookStack's theme system.
+ *
+ * This is the suite to run after a BookStack upgrade: it fails loudly if a
+ * theme event, view path or query helper the module depends on has moved.
+ */
+
+require __DIR__ . '/bootstrap.php';
+
+use BookStack\Facades\Theme;
+use BookStackAiChat\Config;
+use BookStackAiChat\Module;
+
+$checks = new Checks('Theme system wiring');
+
+$checks->section('Module discovery');
+
+$modules = Theme::getModules();
+$checks->that('a theme is active', Theme::getTheme() !== '', Theme::getTheme());
+$checks->that('module discovered', isset($modules['ai-chatbot']));
+
+$module = $modules['ai-chatbot'] ?? null;
+
+if ($module === null) {
+    $checks->finish();
+}
+
+$checks->same('metadata name', 'AI Chatbot', $module->name);
+$checks->same('metadata version', 'v' . Module::VERSION, $module->getVersion());
+
+$checks->section('Core APIs the module depends on');
+
+foreach ([
+    'ROUTES_REGISTER_WEB_AUTH',
+    'THEME_REGISTER_VIEWS',
+] as $event) {
+    $checks->that("ThemeEvents::{$event} still exists", defined(BookStack\Theming\ThemeEvents::class . '::' . $event));
+}
+
+foreach ([
+    BookStack\Search\SearchRunner::class => ['searchEntities'],
+    BookStack\Search\SearchOptions::class => ['fromString'],
+    BookStack\Entities\Queries\PageQueries::class => ['visibleForContent'],
+    BookStack\Entities\Queries\BookQueries::class => ['visibleForList'],
+    BookStack\Entities\Tools\Markdown\HtmlToMarkdown::class => ['convert'],
+    BookStack\Http\HttpRequestService::class => ['buildClient'],
+] as $class => $methods) {
+    $short = class_basename($class);
+    $checks->that("{$short} exists", class_exists($class));
+
+    foreach ($methods as $method) {
+        $checks->that("{$short}::{$method}() exists", method_exists($class, $method));
+    }
+}
+
+$checks->that(
+    'layouts.parts.base-body-end still exists',
+    is_file(base_path('resources/views/layouts/parts/base-body-end.blade.php')),
+);
+
+$checks->section('View resolution');
+
+$finder = app('view')->getFinder();
+
+try {
+    $path = $finder->find('ai-chatbot.widget');
+    $checks->that('widget view resolves to this module', str_contains($path, 'modules/ai-chatbot/views'), $path);
+} catch (Throwable $exception) {
+    $checks->that('widget view resolves to this module', false, $exception->getMessage());
+}
+
+try {
+    app('blade.compiler')->compileString(file_get_contents(
+        $module->path('views/ai-chatbot/widget.blade.php')
+    ));
+    $checks->that('widget view compiles', true);
+} catch (Throwable $exception) {
+    $checks->that('widget view compiles', false, $exception->getMessage());
+}
+
+$checks->section('Public assets');
+
+foreach (['chat.css', 'chat.js'] as $asset) {
+    $found = Theme::findFirstFile("public/ai-chatbot/{$asset}");
+    $checks->that("{$asset} is locatable by the theme controller", $found !== null && str_contains((string) $found, 'modules/ai-chatbot'));
+}
+
+$checks->that(
+    'asset URLs point at the theme route',
+    str_contains(Module::asset('chat.css'), '/theme/' . Theme::getTheme() . '/ai-chatbot/chat.css?v='),
+    Module::asset('chat.css'),
+);
+
+$checks->section('Translations');
+
+$strings = trans('aichat');
+$checks->that('module lang group loads', is_array($strings) && isset($strings['launcher']));
+
+$javascript = file_get_contents($module->path('public/ai-chatbot/chat.js'));
+preg_match_all("/this\.t\('([a-z_]+)'/", $javascript, $matches);
+$missing = array_values(array_diff(array_unique($matches[1]), array_keys(is_array($strings) ? $strings : [])));
+$checks->same('every string the UI asks for is defined', [], $missing);
+
+$checks->section('Route registration');
+
+$routes = collect(app('router')->getRoutes()->getRoutes())
+    ->filter(fn($route) => str_starts_with($route->uri(), 'ai-chat'));
+
+if (!Config::instance()->configured()) {
+    $checks->same('no routes registered without an API key', 0, $routes->count());
+    $checks->finish();
+}
+
+$checks->same('one chat route', 1, $routes->count());
+
+$route = $routes->first();
+$middleware = $route->gatherMiddleware();
+
+$checks->same('accepts POST only', ['POST'], $route->methods());
+$checks->that('runs in the web middleware group', in_array('web', $middleware, true), implode(', ', $middleware));
+$checks->that('requires authentication', in_array('auth', $middleware, true));
+$checks->that('controller class loads', class_exists(BookStackAiChat\Http\ChatController::class));
+
+$checks->finish();
