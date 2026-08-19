@@ -26,8 +26,8 @@ if (cut === -1) {
 
 globalThis.window = {location: {origin: 'https://wiki.test'}};
 
-const module = `${source.slice(0, cut)}\nexport {renderMarkdown, esc, safeHref, safeImageSrc, splitFollowUps, resolveFollowUps, pickFallbackFollowUps, errorKey};`;
-const {renderMarkdown, esc, safeHref, safeImageSrc, splitFollowUps, resolveFollowUps, pickFallbackFollowUps, errorKey} = await import(`data:text/javascript,${encodeURIComponent(module)}`);
+const module = `${source.slice(0, cut)}\nexport {renderMarkdown, esc, safeHref, safeImageSrc, splitFollowUps, resolveFollowUps, pickFallbackFollowUps, errorKey, configureImages, displayImageSrc};`;
+const {renderMarkdown, esc, safeHref, safeImageSrc, splitFollowUps, resolveFollowUps, pickFallbackFollowUps, errorKey, configureImages, displayImageSrc} = await import(`data:text/javascript,${encodeURIComponent(module)}`);
 
 let failures = 0;
 let total = 0;
@@ -98,6 +98,8 @@ contains('s3 gallery url becomes a path', '![d](https://bucket.s3.amazonaws.com/
     'src="/uploads/images/gallery/x.png"');
 contains('regional s3 gallery url becomes a path', '![d](https://bucket.s3.ap-northeast-1.amazonaws.com/uploads/images/gallery/x.png)',
     'src="/uploads/images/gallery/x.png"');
+contains('dualstack s3 gallery url becomes a path', '![d](https://bucket.s3.dualstack.ap-northeast-1.amazonaws.com/uploads/images/gallery/x.png)',
+    'src="/uploads/images/gallery/x.png"');
 excludes('s3 host is not left in src', '![d](https://bucket.s3.amazonaws.com/uploads/images/gallery/x.png)', 'amazonaws.com');
 excludes('javascript image rejected', '![x](javascript:alert(1))', '<img');
 excludes('data image rejected', '![x](data:image/png;base64,aaaa)', '<img');
@@ -108,7 +110,30 @@ excludes('onerror break-out not emitted', '![x](/uploads/images/gallery/x.png" o
 contains('image wins over a link on the same text', '![diagram](/uploads/images/gallery/d.png)', '<img');
 check('safeImageSrc allows gallery path', safeImageSrc('/uploads/images/gallery/a.png') === '/uploads/images/gallery/a.png');
 check('safeImageSrc rewrites s3 to a wiki path', safeImageSrc('https://bucket.s3.amazonaws.com/uploads/images/gallery/a.png') === '/uploads/images/gallery/a.png');
+check('safeImageSrc rewrites dualstack s3', safeImageSrc('https://bucket.s3.dualstack.ap-northeast-1.amazonaws.com/uploads/images/gallery/a.png') === '/uploads/images/gallery/a.png');
+check(
+    'safeImageSrc canonicalises a gallery display thumb',
+    safeImageSrc('/uploads/images/gallery/2026-08/scaled-1680-/a.png') === '/uploads/images/gallery/2026-08/a.png',
+);
 check('safeImageSrc rejects javascript', safeImageSrc('javascript:x') === null);
+{
+    configureImages({dataset: {imageBase: '/ai-chat/image', storageHost: 'cdn.assets.test'}});
+    check(
+        'displayImageSrc prefixes the same-origin proxy for S3',
+        displayImageSrc('https://bookstack-wiki-vdmjp-s3-bucket.s3.amazonaws.com/uploads/images/gallery/2026-08/uMYr887hjyJHjW2i-fault-triage.png')
+            === '/ai-chat/image/uploads/images/gallery/2026-08/uMYr887hjyJHjW2i-fault-triage.png',
+    );
+    check(
+        'displayImageSrc prefixes the proxy for a STORAGE_URL host',
+        displayImageSrc('https://cdn.assets.test/wiki/uploads/images/gallery/a.png')
+            === '/ai-chat/image/uploads/images/gallery/a.png',
+    );
+    check(
+        'displayImageSrc never leaves amazonaws in src',
+        !String(displayImageSrc('https://bucket.s3.amazonaws.com/uploads/images/gallery/a.png') || '').includes('amazonaws.com'),
+    );
+    configureImages({dataset: {imageBase: '', storageHost: ''}});
+}
 
 section('Links');
 contains('external link opens in a new tab', '[docs](https://example.test/a)',

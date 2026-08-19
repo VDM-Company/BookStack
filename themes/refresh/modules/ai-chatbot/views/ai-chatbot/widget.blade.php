@@ -8,12 +8,8 @@
      */
     $aiChatConfig = \BookStackAiChat\Config::instance();
     $aiChatVisible = \BookStackAiChat\Access::allows(user(), $aiChatConfig);
-    $aiChatStorageUrl = config('filesystems.url');
-    $aiChatStorageHost = '';
-    if (is_string($aiChatStorageUrl) && $aiChatStorageUrl !== '' && strtolower($aiChatStorageUrl) !== 'false') {
-        $aiChatStorageHost = (string) (parse_url($aiChatStorageUrl, PHP_URL_HOST) ?? '');
-    }
-    $aiChatImageProxy = config('filesystems.images') === 's3' || $aiChatStorageHost !== '';
+    $aiChatImageProxy = \BookStackAiChat\Knowledge\PageImages::shouldProxyImages();
+    $aiChatStorageHost = implode(',', \BookStackAiChat\Knowledge\PageImages::storageHosts());
 @endphp
 
 @if($aiChatVisible)

@@ -141,6 +141,16 @@ $checks->that(
     'image stream route exists',
     $routes->contains(fn ($route) => $route->uri() === 'ai-chat/image/{path}'),
 );
+
+try {
+    $matched = app('router')->getRoutes()->match(
+        Illuminate\Http\Request::create('/ai-chat/image/uploads/images/gallery/2026-08/uMYr887hjyJHjW2i-fault-triage.png', 'GET')
+    );
+    $checks->same('image proxy matches a nested gallery path', 'ai-chat.image', $matched->getName());
+} catch (Throwable $exception) {
+    $checks->that('image proxy matches a nested gallery path', false, $exception->getMessage());
+}
+
 $checks->that(
     'token refresh route exists',
     $routes->contains(fn ($route) => $route->uri() === 'ai-chat/token'),

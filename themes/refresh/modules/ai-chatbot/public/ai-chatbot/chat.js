@@ -54,9 +54,15 @@ function safeHref(href) {
 function isStorageHost(host) {
     host = String(host || '').toLowerCase();
     if (!host) return false;
-    if (storageHost && host === storageHost) return true;
-    return /\.s3(?:[.-][a-z0-9-]+)?\.amazonaws\.com$/.test(host)
-        || /^s3(?:[.-][a-z0-9-]+)?\.amazonaws\.com$/.test(host);
+    if (storageHost) {
+        const known = storageHost.split(',').map(item => item.trim()).filter(Boolean);
+        if (known.includes(host)) return true;
+    }
+    return /(?:^|\.)s3(?:[.-][a-z0-9-]+)*\.amazonaws\.com(?:\.cn)?$/.test(host);
+}
+
+function canonicalUploadsPath(pathname) {
+    return String(pathname || '').replace(/\/(?:thumbs|scaled)-[0-9]*-[0-9]*\//g, '/');
 }
 
 function rewriteWikiImageUrl(href) {
@@ -112,7 +118,7 @@ function safeImageSrc(href) {
     const search = path.includes('?') ? path.slice(path.indexOf('?') + 1) : '';
 
     if (/^\/(?:[\w.-]+\/)*uploads\/images\/[A-Za-z0-9._/-]+$/.test(pathname)) {
-        return pathname;
+        return canonicalUploadsPath(pathname);
     }
 
     if (/^\/(?:[\w.-]+\/)*attachments\/\d+$/.test(pathname) && (search === '' || search === 'open=true')) {

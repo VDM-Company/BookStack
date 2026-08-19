@@ -5,6 +5,7 @@ namespace BookStackAiChat\Knowledge;
 use BookStack\Entities\Models\Page;
 use BookStack\Uploads\Attachment;
 use BookStack\Uploads\Image;
+use BookStack\Uploads\ImageStorage;
 
 /**
  * Finds images that already belong to a visible wiki page.
@@ -157,7 +158,12 @@ class PageImages
                 return null;
             }
 
-            return $path;
+            $canonical = self::canonicalUploadsPath($relative);
+            if ($canonical !== $relative && !self::isAllowedImagePath($canonical)) {
+                return null;
+            }
+
+            return $path === $relative ? $canonical : $appPrefix . $canonical;
         }
 
         if (preg_match('#^/attachments/[0-9]+$#', $relative) && ($query === '' || $query === 'open=true')) {
@@ -165,6 +171,88 @@ class PageImages
         }
 
         return null;
+    }
+
+    /**
+     * Whether chatbot images must be served from /ai-chat/image so the browser
+     * never requests S3 or STORAGE_URL directly (private buckets 403).
+     */
+    public static function shouldProxyImages(): bool
+    {
+        try {
+            if (strtolower((string) config('filesystems.images')) === 's3') {
+                return true;
+            }
+
+            $appHost = strtolower((string) (parse_url((string) url('/'), PHP_URL_HOST) ?? ''));
+            foreach (self::storageHosts() as $host) {
+                if ($host !== '' && $host !== $appHost) {
+                    return true;
+                }
+            }
+        } catch (\Throwable) {
+            return false;
+        }
+
+        return false;
+    }
+
+    /**
+     * Hosts whose object URLs should be rewritten to /uploads/images/...
+     *
+     * @return string[]
+     */
+    public static function storageHosts(): array
+    {
+        return self::configuredStorageHosts();
+    }
+
+    /**
+     * Drop BookStack thumbnail folders (scaled-1680-/, thumbs-150-150/) so a
+     * gallery display URL maps to the Image.path row and the original object.
+     */
+    public static function canonicalUploadsPath(string $path): string
+    {
+        $prefix = '';
+        $relative = $path;
+
+        if (str_starts_with($path, '/uploads/images/')) {
+            $prefix = '/uploads/images/';
+            $relative = substr($path, strlen($prefix));
+        } elseif (str_starts_with($path, 'uploads/images/')) {
+            $prefix = 'uploads/images/';
+            $relative = substr($path, strlen($prefix));
+        } else {
+            return $path;
+        }
+
+        $parts = array_values(array_filter(explode('/', $relative), static fn (string $part): bool => $part !== ''));
+        $kept = [];
+
+        foreach ($parts as $part) {
+            $resizedDir = str_starts_with($part, 'thumbs-') || str_starts_with($part, 'scaled-');
+            $missingExtension = !str_contains($part, '.');
+            if ($resizedDir && $missingExtension) {
+                continue;
+            }
+
+            $kept[] = $part;
+        }
+
+        return rtrim($prefix, '/') . '/' . implode('/', $kept);
+    }
+
+    /**
+     * Paths to try when matching an Image.path row.
+     *
+     * @return string[]
+     */
+    public static function imageLookupPaths(string $path): array
+    {
+        $canonical = self::canonicalUploadsPath($path);
+        $variants = [$path, ltrim($path, '/'), $canonical, ltrim($canonical, '/')];
+
+        return array_values(array_unique(array_filter($variants, static fn (string $item): bool => $item !== '')));
     }
 
     /**
@@ -572,6 +660,14 @@ class PageImages
             return $url;
         }
 
+        try {
+            $converted = app(ImageStorage::class)->urlToPath($url);
+            if (is_string($converted) && preg_match('#uploads/images/[A-Za-z0-9._/-]+#', $converted)) {
+                return '/' . ltrim($converted, '/');
+            }
+        } catch (\Throwable) {
+        }
+
         $parts = parse_url($url);
         if ($parts === false) {
             return $url;
@@ -599,18 +695,8 @@ class PageImages
             }
         }
 
-        // Virtual-hosted: {bucket}.s3.amazonaws.com / {bucket}.s3.{region}.amazonaws.com
-        // and the older {bucket}.s3-{region}.amazonaws.com form.
-        if (preg_match('/\.s3(?:[.-][a-z0-9-]+)?\.amazonaws\.com$/', $host)) {
-            return true;
-        }
-
-        // Path-style: s3.amazonaws.com / s3.{region}.amazonaws.com / s3-{region}.amazonaws.com
-        if (preg_match('/^s3(?:[.-][a-z0-9-]+)?\.amazonaws\.com$/', $host)) {
-            return true;
-        }
-
-        return false;
+        // Virtual-hosted, path-style, regional, dualstack, accelerate, .com.cn
+        return (bool) preg_match('/(?:^|\.)s3(?:[.-][a-z0-9-]+)*\.amazonaws\.com(?:\.cn)?$/', $host);
     }
 
     /**
@@ -635,10 +721,46 @@ class PageImages
                     $hosts[] = $host;
                 }
             }
+
+            try {
+                $public = ImageStorage::getPublicUrl('/uploads/images/placeholder.png');
+                $host = strtolower((string) (parse_url($public, PHP_URL_HOST) ?? ''));
+                if ($host !== '') {
+                    $hosts[] = $host;
+                }
+            } catch (\Throwable) {
+            }
+
+            $bucket = strtolower((string) config('filesystems.disks.s3.bucket', ''));
+            $region = strtolower((string) config('filesystems.disks.s3.region', ''));
+            $placeholderBucket = in_array($bucket, ['', 'your-bucket', 's3-bucket-name'], true);
+            $placeholderRegion = in_array($region, ['', 'your-region', 's3-bucket-region'], true);
+
+            if (!$placeholderBucket) {
+                if (!str_contains($bucket, '.')) {
+                    $hosts[] = $bucket . '.s3.amazonaws.com';
+                    if (!$placeholderRegion) {
+                        $hosts[] = $bucket . '.s3.' . $region . '.amazonaws.com';
+                        $hosts[] = $bucket . '.s3-' . $region . '.amazonaws.com';
+                        $hosts[] = $bucket . '.s3.dualstack.' . $region . '.amazonaws.com';
+                    }
+                } else {
+                    $hosts[] = 's3.amazonaws.com';
+                    if (!$placeholderRegion) {
+                        $hosts[] = 's3-' . $region . '.amazonaws.com';
+                        $hosts[] = 's3.' . $region . '.amazonaws.com';
+                    }
+                }
+            }
         } catch (\Throwable) {
         }
 
-        return array_values(array_unique($hosts));
+        $appHost = strtolower((string) (parse_url((string) url('/'), PHP_URL_HOST) ?? ''));
+
+        return array_values(array_unique(array_filter(
+            $hosts,
+            static fn (string $host): bool => $host !== '' && $host !== $appHost,
+        )));
     }
 
     protected static function plainAlt(string $alt): string

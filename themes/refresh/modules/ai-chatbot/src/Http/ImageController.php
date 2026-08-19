@@ -36,8 +36,7 @@ class ImageController extends Controller
         $record = Image::query()
             ->scopes(['visible'])
             ->where(function ($query) use ($relative): void {
-                $query->where('path', $relative)
-                    ->orWhere('path', ltrim($relative, '/'));
+                $query->whereIn('path', PageImages::imageLookupPaths($relative));
             })
             ->first();
 
@@ -45,7 +44,11 @@ class ImageController extends Controller
             abort(404);
         }
 
-        return $images->streamImageFromStorageResponse((string) $record->type, (string) $record->path);
+        try {
+            return $images->streamImageFromStorageResponse((string) $record->type, (string) $record->path);
+        } catch (\Throwable) {
+            abort(404);
+        }
     }
 
     protected function uploadsRelative(string $path): ?string

@@ -106,6 +106,7 @@ $checks->that('omits the fence only for a pure error or refusal', str_contains($
 $checks->that('omits page context when there is none', !str_contains(Prompt::build($config, null, []), 'currently viewing'));
 $checks->that('tells the model to embed wiki images', str_contains($prompt, '![caption](url)'));
 $checks->that('forbids inventing image URLs', str_contains($prompt, 'Do not invent, guess or rewrite image URLs'));
+$checks->that('forbids converting image URLs to amazonaws hosts', str_contains($prompt, 'amazonaws.com'));
 $checks->that('skips editable-source images', str_contains($prompt, 'editable source'));
 
 $checks->section('Page image extraction');
@@ -183,8 +184,36 @@ $checks->same(
 );
 $checks->that('rewritten S3 URL has no amazonaws host', !str_contains((string) PageImages::sanitiseUrl($s3Virtual), 'amazonaws.com'));
 
+$checks->same(
+    'rewrites dualstack virtual-hosted S3',
+    $s3Expected,
+    PageImages::sanitiseUrl('https://bookstack-wiki-vdmjp-s3-bucket.s3.dualstack.ap-northeast-1.amazonaws.com/uploads/images/gallery/2026-08/uMYr887hjyJHjW2i-fault-triage.png'),
+);
+$checks->same(
+    'rewrites s3-accelerate',
+    $s3Expected,
+    PageImages::sanitiseUrl('https://bookstack-wiki-vdmjp-s3-bucket.s3-accelerate.amazonaws.com/uploads/images/gallery/2026-08/uMYr887hjyJHjW2i-fault-triage.png'),
+);
+
 $fromS3Html = PageImages::extract('<img src="' . $s3Virtual . '" alt="Triage">');
 $checks->same('HTML S3 src becomes a wiki path', $s3Expected, $fromS3Html[0]['url'] ?? null);
+
+$scaledS3 = 'https://bookstack-wiki-vdmjp-s3-bucket.s3.amazonaws.com/uploads/images/gallery/2026-08/scaled-1680-/uMYr887hjyJHjW2i-fault-triage.png';
+$fromScaled = PageImages::extract('<img src="' . $scaledS3 . '" alt="Triage">');
+$checks->same('HTML scaled S3 thumb becomes the original wiki path', $s3Expected, $fromScaled[0]['url'] ?? null);
+
+$galleryInsert = '[![Triage](' . $scaledS3 . ')](' . $s3Virtual . ')';
+$fromNested = PageImages::extract('', $galleryInsert);
+$checks->same('markdown gallery insert (thumb inside link) becomes original path', $s3Expected, $fromNested[0]['url'] ?? null);
+$checks->same(
+    'canonicalUploadsPath strips scaled-1680-/',
+    $s3Expected,
+    PageImages::canonicalUploadsPath('/uploads/images/gallery/2026-08/scaled-1680-/uMYr887hjyJHjW2i-fault-triage.png'),
+);
+$checks->that(
+    'imageLookupPaths include the original Image.path',
+    in_array($s3Expected, PageImages::imageLookupPaths('/uploads/images/gallery/2026-08/scaled-1680-/uMYr887hjyJHjW2i-fault-triage.png'), true),
+);
 
 $previousStorageUrl = config('filesystems.url');
 config(['filesystems.url' => 'https://cdn.assets.test/wiki']);
@@ -194,6 +223,42 @@ $checks->same(
     PageImages::sanitiseUrl('https://cdn.assets.test/wiki/uploads/images/gallery/2026-08/x.png'),
 );
 config(['filesystems.url' => $previousStorageUrl]);
+
+config(['filesystems.url' => 'https://bookstack-wiki-vdmjp-s3-bucket.s3.amazonaws.com']);
+$checks->same(
+    'rewrites STORAGE_URL when it is the S3 bucket URL',
+    $s3Expected,
+    PageImages::sanitiseUrl($s3Virtual),
+);
+$checks->that(
+    'STORAGE_URL S3 host is a rewrite host',
+    in_array('bookstack-wiki-vdmjp-s3-bucket.s3.amazonaws.com', PageImages::storageHosts(), true),
+);
+$checks->that('proxies when STORAGE_URL is an S3 host', PageImages::shouldProxyImages());
+config(['filesystems.url' => $previousStorageUrl]);
+
+$previousImagesDisk = config('filesystems.images');
+config(['filesystems.images' => 's3']);
+$checks->that('proxies when the image disk is s3', PageImages::shouldProxyImages());
+config(['filesystems.images' => 'S3']);
+$checks->that('proxies when the image disk is S3 (any case)', PageImages::shouldProxyImages());
+config(['filesystems.images' => $previousImagesDisk]);
+$checks->that(
+    'does not proxy a local disk with no STORAGE_URL',
+    !PageImages::shouldProxyImages() || strtolower((string) $previousImagesDisk) === 's3',
+);
+
+$imageController = (string) file_get_contents(dirname(__DIR__) . '/src/Http/ImageController.php');
+$checks->that(
+    'image proxy streams via ImageService, not local public_path',
+    str_contains($imageController, 'streamImageFromStorageResponse')
+        && !str_contains($imageController, 'public_path')
+        && !str_contains($imageController, 'storage_path'),
+);
+$checks->that(
+    'image proxy matches Image.path with or without thumbs/',
+    str_contains($imageController, 'imageLookupPaths'),
+);
 
 $mixed = PageImages::extract(
     '<img src="/uploads/images/gallery/2026-08/seven-day-clocks.svg" alt="seven-day-clocks.svg (editable source)">'
