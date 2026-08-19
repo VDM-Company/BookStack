@@ -7,7 +7,7 @@ use BookStack\Facades\Theme;
 class Module
 {
     /** Keep in step with bookstack-module.json; also used for asset cache-busting. */
-    public const VERSION = '1.1.2';
+    public const VERSION = '1.1.4';
 
     /**
      * Public asset URL. Files live under the module's `public/ai-chatbot/`

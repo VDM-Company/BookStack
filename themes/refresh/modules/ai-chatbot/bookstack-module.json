@@ -1,5 +1,5 @@
 {
     "name": "AI Chatbot",
     "description": "A Claude-powered assistant that answers questions from your wiki content, restricted to what the asking user is allowed to see.",
-    "version": "1.1.2"
+    "version": "1.1.4"
 }

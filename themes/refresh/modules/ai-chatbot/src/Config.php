@@ -48,7 +48,7 @@ class Config
 
     public function model(): string
     {
-        return $this->string('AI_CHATBOT_MODEL', 'claude-sonnet-5');
+        return $this->string('AI_CHATBOT_MODEL', 'claude-haiku-4-5');
     }
 
     public function apiBase(): string
@@ -58,7 +58,7 @@ class Config
 
     public function maxTokens(): int
     {
-        return $this->int('AI_CHATBOT_MAX_TOKENS', 2048, 256, 32000);
+        return $this->int('AI_CHATBOT_MAX_TOKENS', 1024, 256, 32000);
     }
 
     /**
@@ -82,7 +82,7 @@ class Config
 
     public function searchResultLimit(): int
     {
-        return $this->int('AI_CHATBOT_SEARCH_RESULTS', 10, 1, 30);
+        return $this->int('AI_CHATBOT_SEARCH_RESULTS', 5, 1, 30);
     }
 
     /**
@@ -90,7 +90,7 @@ class Config
      */
     public function pageCharLimit(): int
     {
-        return $this->int('AI_CHATBOT_PAGE_CHARS', 12000, 500, 200000);
+        return $this->int('AI_CHATBOT_PAGE_CHARS', 4000, 500, 200000);
     }
 
     /**
@@ -98,7 +98,7 @@ class Config
      */
     public function historyLimit(): int
     {
-        return $this->int('AI_CHATBOT_HISTORY_TURNS', 12, 0, 60);
+        return $this->int('AI_CHATBOT_HISTORY_TURNS', 6, 0, 60);
     }
 
     /**

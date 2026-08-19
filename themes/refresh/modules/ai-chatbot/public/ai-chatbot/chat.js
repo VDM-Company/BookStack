@@ -250,6 +250,37 @@ function splitFollowUps(source) {
     return {text: before, questions: []};
 }
 
+/**
+ * Prefer model-supplied follow-ups. If the fence was missing or empty,
+ * use the fallback list instead.
+ */
+function resolveFollowUps(related, fallback) {
+    const relatedClean = (Array.isArray(related) ? related : [])
+        .map(text => String(text).trim())
+        .filter(text => text !== '')
+        .slice(0, 4);
+
+    if (relatedClean.length) return relatedClean;
+
+    return (Array.isArray(fallback) ? fallback : [])
+        .map(text => String(text).trim())
+        .filter(text => text !== '')
+        .slice(0, 4);
+}
+
+/**
+ * Pick up to `limit` fallback chips, skipping any that match the last user
+ * message so we never offer the question they just asked.
+ */
+function pickFallbackFollowUps(candidates, lastUser, limit = 3) {
+    const last = String(lastUser || '').trim();
+
+    return (Array.isArray(candidates) ? candidates : [])
+        .map(text => String(text).trim())
+        .filter(text => text !== '' && text !== last)
+        .slice(0, limit);
+}
+
 /* --------------------------------------------------------------------- icons */
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
@@ -456,6 +487,7 @@ class Chatbot {
 
         let lastAssistant = null;
         let lastQuestions = [];
+        let lastUser = '';
         let rewritten = false;
 
         this.messages.forEach(message => {
@@ -463,6 +495,7 @@ class Chatbot {
             const body = this.addBody(wrapper);
 
             if (message.role === 'user') {
+                lastUser = message.content;
                 body.textContent = message.content;
                 return;
             }
@@ -475,11 +508,6 @@ class Chatbot {
                 rewritten = true;
             }
 
-            if (!stored.length && split.questions.length) {
-                message.followups = split.questions;
-                rewritten = true;
-            }
-
             body.innerHTML = renderMarkdown(message.content);
 
             if (message.sources && message.sources.length) {
@@ -487,7 +515,21 @@ class Chatbot {
             }
 
             lastAssistant = wrapper;
-            lastQuestions = Array.isArray(message.followups) ? message.followups : [];
+
+            if (!message.content.trim()) {
+                lastQuestions = [];
+                return;
+            }
+
+            const related = stored.length ? stored : split.questions;
+            const questions = resolveFollowUps(related, this.fallbackFollowUps(lastUser));
+
+            if (JSON.stringify(stored) !== JSON.stringify(questions)) {
+                message.followups = questions;
+                rewritten = true;
+            }
+
+            lastQuestions = questions;
         });
 
         if (rewritten) this.persist();
@@ -543,6 +585,26 @@ class Chatbot {
         this.log.querySelectorAll('.aic-followups').forEach(node => node.remove());
     }
 
+    fallbackFollowUps(lastUserText) {
+        const last = String(lastUserText || '').trim();
+        const howto = this.t('suggestion_howto');
+        const candidates = [];
+
+        if (last !== howto) {
+            candidates.push(howto);
+        }
+
+        candidates.push(this.t('suggestion_contents'), this.t('suggestion_read_first'));
+
+        if (this.pageTitle()) {
+            candidates.push(this.t('suggestion_summarise'));
+        }
+
+        candidates.push(this.t('suggestion_find_policy'));
+
+        return pickFallbackFollowUps(candidates, last, 3);
+    }
+
     addFollowUps(wrapper, questions) {
         this.clearFollowUps();
 
@@ -551,6 +613,9 @@ class Chatbot {
 
         const messages = this.log.querySelectorAll('.aic-msg');
         if (wrapper !== messages[messages.length - 1]) return;
+
+        const body = wrapper.querySelector('.aic-body');
+        if (!body || !body.textContent.trim()) return;
 
         const labels = (Array.isArray(questions) ? questions : [])
             .map(text => String(text).trim())
@@ -861,12 +926,13 @@ class Chatbot {
                 if (assistant.content.trim()) {
                     const split = splitFollowUps(assistant.content);
                     assistant.content = split.text;
-                    assistant.followups = split.questions;
 
                     if (assistant.content.trim()) {
+                        const questions = resolveFollowUps(split.questions, this.fallbackFollowUps(question));
+                        assistant.followups = questions;
                         this.messages.push(assistant);
                         this.persist();
-                        this.addFollowUps(wrapper, split.questions);
+                        this.addFollowUps(wrapper, questions);
                     }
                 }
 

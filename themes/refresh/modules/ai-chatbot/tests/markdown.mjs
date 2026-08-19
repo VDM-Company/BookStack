@@ -26,8 +26,8 @@ if (cut === -1) {
 
 globalThis.window = {location: {origin: 'https://wiki.test'}};
 
-const module = `${source.slice(0, cut)}\nexport {renderMarkdown, esc, safeHref, splitFollowUps};`;
-const {renderMarkdown, esc, safeHref, splitFollowUps} = await import(`data:text/javascript,${encodeURIComponent(module)}`);
+const module = `${source.slice(0, cut)}\nexport {renderMarkdown, esc, safeHref, splitFollowUps, resolveFollowUps, pickFallbackFollowUps};`;
+const {renderMarkdown, esc, safeHref, splitFollowUps, resolveFollowUps, pickFallbackFollowUps} = await import(`data:text/javascript,${encodeURIComponent(module)}`);
 
 let failures = 0;
 let total = 0;
@@ -152,6 +152,27 @@ section('Follow-up fence');
 
     const mid = splitFollowUps('See :::followups in passing');
     check('ignores a mid-line marker', mid.text === 'See :::followups in passing' && mid.questions.length === 0);
+
+    const related = resolveFollowUps(['How is MFA reset?', 'Where is the VPN page?'], ['What does this wiki cover?']);
+    check('prefers related chips when the fence has questions', related.join('|') === 'How is MFA reset?|Where is the VPN page?');
+
+    const missing = resolveFollowUps([], ['What does this wiki cover?', 'What should I read first?', 'How do I find a specific policy?']);
+    check('uses fallback chips when the fence is empty', missing.join('|') === 'What does this wiki cover?|What should I read first?|How do I find a specific policy?');
+
+    const absent = resolveFollowUps(null, ['What can you help me with?', 'What does this wiki cover?']);
+    check('uses fallback chips when the fence is missing', absent[0] === 'What can you help me with?' && absent.length === 2);
+
+    const howto = 'What can you help me with?';
+    const pool = [howto, 'What does this wiki cover?', 'What should I read first?', 'Summarise the page I am on', 'How do I find a specific policy?'];
+    const afterHowTo = pickFallbackFollowUps(pool, howto, 3);
+    check('fallback skips the last user question', !afterHowTo.includes(howto) && afterHowTo.length === 3);
+    check('fallback after howto starts with wiki cover', afterHowTo[0] === 'What does this wiki cover?');
+
+    const afterCover = pickFallbackFollowUps(pool, 'What does this wiki cover?', 3);
+    check('fallback skips a matching later chip', afterCover.join('|') === 'What can you help me with?|What should I read first?|Summarise the page I am on');
+
+    const capped = pickFallbackFollowUps(pool, '', 3);
+    check('fallback shows three chips', capped.length === 3 && capped[0] === howto);
 }
 
 section('Helpers');

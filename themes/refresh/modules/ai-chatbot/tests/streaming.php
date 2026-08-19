@@ -26,7 +26,7 @@ $checks->section('Configuration');
 $checks->same('api base points at the fake server', 'http://127.0.0.1:8791', $config->apiBase());
 $checks->that('api key is readable', $config->apiKey() !== '');
 $checks->that('module reports configured', $config->configured());
-$checks->same('default model', 'claude-sonnet-5', $config->model());
+$checks->same('default model', 'claude-haiku-4-5', $config->model());
 
 $client = new Client($config, app()->make(HttpRequestService::class));
 $searchTool = [[
