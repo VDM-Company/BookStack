@@ -12,6 +12,7 @@ use BookStackAiChat\Anthropic\MessageAccumulator;
 use BookStackAiChat\Chat\History;
 use BookStackAiChat\Chat\Prompt;
 use BookStackAiChat\Config;
+use BookStackAiChat\ErrorReport;
 use BookStackAiChat\Knowledge\PageImages;
 
 $checks = new Checks('Units');
@@ -163,6 +164,8 @@ $checks->that('model listing includes the markdown', str_contains($listed, '![A]
 $checks->that('model listing names the page', str_contains($listed, 'VPN'));
 $checks->that('model listing forbids invented URLs', str_contains($listed, 'do not invent URLs'));
 $checks->same('empty listing is blank', '', PageImages::formatForModel([]));
+$checks->same('empty page extract is safe', [], PageImages::extract('', '', 4));
+$checks->same('replaceHtmlImages on empty text is safe', '', PageImages::replaceHtmlImages(''));
 
 $agent = file_get_contents(dirname(__DIR__) . '/src/Chat/ChatAgent.php');
 $checks->that(
@@ -255,6 +258,26 @@ $checks->that(
     is_string($controller) && str_contains($controller, 'session_write_close()'),
 );
 $checks->that(
+    'pre-stream failures become a JSON refuse rather than an HTML 500',
+    is_string($controller)
+        && str_contains($controller, 'handleMessage')
+        && str_contains($controller, 'ValidationException')
+        && str_contains($controller, "refuse('The assistant hit an unexpected error.', 500)"),
+);
+$checks->that(
+    'done events carry an object payload',
+    is_string($controller) && str_contains($controller, "send('done', ['ok' => true])"),
+);
+$checks->that(
+    'agent done events carry an object payload',
+    str_contains((string) file_get_contents(dirname(__DIR__) . '/src/Chat/ChatAgent.php'), "emit('done', ['ok' => true])"),
+);
+$fromPage = file_get_contents(dirname(__DIR__) . '/src/Knowledge/PageImages.php');
+$checks->that(
+    'page image extraction cannot escape into a 500',
+    is_string($fromPage) && substr_count($fromPage, 'catch (\\Throwable)') >= 4,
+);
+$checks->that(
     'agent loop can stop when the browser is gone',
     str_contains((string) file_get_contents(dirname(__DIR__) . '/src/Chat/ChatAgent.php'), 'shouldStop'),
 );
@@ -267,5 +290,16 @@ $checks->that('length 400 still mentions starting a new chat', str_contains($len
 $validation = new ApiException('messages.1.content.0.tool_use.input: Input should be an object', 400, 'invalid_request_error');
 $checks->that('validation 400 does not claim the request is too long', !str_contains($validation->userMessage(), 'too long'));
 $checks->that('validation 400 stays generic', str_contains($validation->userMessage(), 'rejected'));
+
+$checks->section('Error reporting');
+
+$checks->that('ErrorReport is loadable', class_exists(ErrorReport::class));
+$threw = false;
+try {
+    ErrorReport::message('unit check — do not alert', ['source' => 'unit']);
+} catch (Throwable) {
+    $threw = true;
+}
+$checks->that('message() does not throw without a DSN', !$threw);
 
 $checks->finish();

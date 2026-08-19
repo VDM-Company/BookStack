@@ -49,6 +49,18 @@ class Handler extends ExceptionHandler
     protected $onOutOfMemory = null;
 
     /**
+     * Register the exception handling callbacks for the application.
+     */
+    public function register(): void
+    {
+        $this->reportable(function (Throwable $e) {
+            if (class_exists(\Sentry\Laravel\Integration::class)) {
+                \Sentry\Laravel\Integration::captureUnhandledException($e);
+            }
+        });
+    }
+
+    /**
      * Report or log an exception.
      *
      * @param Throwable $exception

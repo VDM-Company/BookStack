@@ -375,6 +375,8 @@ class Chatbot {
     constructor(root) {
         this.root = root;
         this.endpoint = root.dataset.endpoint;
+        this.reportEndpoint = root.dataset.reportEndpoint || '';
+        this.lastFailure = null;
         this.appName = root.dataset.appName || '';
         this.strings = this.readStrings(root.dataset.strings);
         this.messages = this.load();
@@ -950,7 +952,9 @@ class Chatbot {
                 signal: this.controller.signal,
                 headers: {
                     'Content-Type': 'application/json',
-                    'Accept': 'text/event-stream',
+                    // JSON first so Laravel 4xx/5xx pages come back as
+                    // `{message: ...}` instead of HTML the catch-all cannot read.
+                    'Accept': 'application/json, text/event-stream',
                     'X-CSRF-TOKEN': document.querySelector('meta[name="token"]')?.content || '',
                     'X-Requested-With': 'XMLHttpRequest',
                 },
@@ -964,8 +968,17 @@ class Chatbot {
                 }),
             });
 
-            if (!response.ok || !response.body) {
+            if (!response.ok) {
                 throw new Error(await this.errorFrom(response));
+            }
+
+            if (!response.body) {
+                this.lastFailure = {
+                    status: response.status,
+                    contentType: response.headers.get('content-type') || '',
+                    preview: 'empty-body',
+                };
+                throw new Error(this.t('error_network'));
             }
 
             const reader = response.body.getReader();
@@ -1003,15 +1016,17 @@ class Chatbot {
                     } else if (name === 'images') {
                         assistant.images = Array.isArray(data.images) ? data.images : [];
                     } else if (name === 'notice') {
-                        this.appendNote(wrapper, 'aic-notice', data.message);
+                        this.appendNote(wrapper, 'aic-notice', data && data.message);
                     } else if (name === 'error') {
-                        this.appendNote(wrapper, 'aic-error', data.message);
+                        const message = data && typeof data.message === 'string' ? data.message : '';
+                        this.appendNote(wrapper, 'aic-error', message || this.t('error_server'));
                     }
                 }
             }
         } catch (error) {
             if (error.name !== 'AbortError') {
                 this.appendNote(wrapper, 'aic-error', error.message || this.t('error_network'));
+                this.reportFailure(error);
             }
         } finally {
             this.controller = null;
@@ -1073,12 +1088,80 @@ class Chatbot {
     }
 
     async errorFrom(response) {
+        const generic = this.t('error_generic');
+        const contentType = response.headers.get('content-type') || '';
+        let preview = '';
+        let message = '';
+
         try {
-            const data = await response.json();
-            return data.message || this.t('error_generic');
+            const text = await response.text();
+            preview = text.slice(0, 400);
+            try {
+                const data = JSON.parse(text);
+                if (data && typeof data.message === 'string' && data.message !== '') {
+                    message = data.message;
+                }
+            } catch (error) {
+                // HTML/plain gateway pages have no JSON message.
+            }
         } catch (error) {
-            return this.t('error_generic');
+            preview = '';
         }
+
+        this.lastFailure = {status: response.status, contentType, preview};
+
+        if (message) {
+            return message;
+        }
+
+        if (response.status === 419) return this.t('error_session');
+        if (response.status === 429) return this.t('error_rate');
+        if (response.status === 404 || response.status === 405) return this.t('error_unavailable');
+        if ([502, 503, 504, 520, 521, 522, 523, 524, 525, 526].includes(response.status)) {
+            return this.t('error_gateway');
+        }
+        if (response.status >= 500) return this.t('error_server');
+
+        return generic;
+    }
+
+    reportFailure(error) {
+        if (!this.reportEndpoint) {
+            return;
+        }
+
+        const params = new URLSearchParams();
+        params.set('kind', 'client');
+
+        if (error && error.message) {
+            params.set('message', String(error.message).slice(0, 400));
+        }
+
+        if (this.lastFailure) {
+            if (this.lastFailure.status) {
+                params.set('status', String(this.lastFailure.status));
+            }
+            if (this.lastFailure.contentType) {
+                params.set('content_type', String(this.lastFailure.contentType).slice(0, 120));
+            }
+            if (this.lastFailure.preview) {
+                params.set('body_preview', String(this.lastFailure.preview).slice(0, 400));
+            }
+        }
+
+        try {
+            params.set('page', String(window.location.pathname || '').slice(0, 200));
+        } catch (err) {
+            // pathname can be unavailable in some embeds
+        }
+
+        fetch(this.reportEndpoint + '?' + params.toString(), {
+            method: 'GET',
+            credentials: 'same-origin',
+            keepalive: true,
+        }).catch(() => {});
+
+        this.lastFailure = null;
     }
 
     appendNote(wrapper, className, message) {

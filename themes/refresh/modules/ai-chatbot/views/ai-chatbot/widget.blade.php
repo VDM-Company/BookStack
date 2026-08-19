@@ -16,6 +16,7 @@
     <div id="ai-chatbot"
          class="print-hidden"
          data-endpoint="{{ url('/ai-chat/message') }}"
+         data-report-endpoint="{{ url('/ai-chat/client-error') }}"
          data-app-name="{{ setting('app-name') }}"
          data-strings="{{ json_encode(trans('aichat')) }}"></div>
 

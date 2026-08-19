@@ -41,6 +41,11 @@ return [
 
     'error_generic' => 'Something went wrong. Please try again.',
     'error_network' => 'Lost connection to the server.',
+    'error_session' => 'Your session expired. Refresh the page and try again.',
+    'error_rate' => 'Too many messages. Please wait a moment.',
+    'error_gateway' => 'The site could not reach the assistant. Please try again shortly.',
+    'error_server' => 'The server returned an error. Please try again.',
+    'error_unavailable' => 'The assistant is temporarily unavailable.',
     'copy' => 'Copy',
     'copied' => 'Copied',
 ];

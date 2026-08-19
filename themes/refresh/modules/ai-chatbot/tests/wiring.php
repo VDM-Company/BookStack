@@ -125,14 +125,22 @@ if (!Config::instance()->configured()) {
     $checks->finish();
 }
 
-$checks->same('one chat route', 1, $routes->count());
+$checks->that(
+    'message route exists',
+    $routes->contains(fn ($route) => $route->uri() === 'ai-chat/message'),
+);
+$checks->that(
+    'client-error route exists',
+    $routes->contains(fn ($route) => $route->uri() === 'ai-chat/client-error'),
+);
 
-$route = $routes->first();
-$middleware = $route->gatherMiddleware();
+$message = $routes->first(fn ($route) => $route->uri() === 'ai-chat/message');
+$middleware = $message ? $message->gatherMiddleware() : [];
 
-$checks->same('accepts POST only', ['POST'], $route->methods());
+$checks->same('message accepts POST only', ['POST'], $message ? $message->methods() : []);
 $checks->that('runs in the web middleware group', in_array('web', $middleware, true), implode(', ', $middleware));
 $checks->that('requires authentication', in_array('auth', $middleware, true));
 $checks->that('controller class loads', class_exists(BookStackAiChat\Http\ChatController::class));
+$checks->that('error reporter loads', class_exists(BookStackAiChat\ErrorReport::class));
 
 $checks->finish();

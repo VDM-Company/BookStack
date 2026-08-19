@@ -28,34 +28,38 @@ class PageImages
      */
     public static function fromPage(Page $page, int $limit = self::PER_PAGE): array
     {
-        $limit = max(0, $limit);
-        if ($limit === 0) {
+        try {
+            $limit = max(0, $limit);
+            if ($limit === 0) {
+                return [];
+            }
+
+            $found = self::extract((string) ($page->html ?? ''), (string) ($page->markdown ?? ''), $limit);
+            $found = self::appendAttachments($page, $found, $limit);
+            $found = self::appendGallery($page, $found, $limit);
+
+            $pageUrl = '';
+            try {
+                $pageUrl = (string) $page->getUrl();
+            } catch (\Throwable) {
+                $pageUrl = '';
+            }
+
+            $out = [];
+            foreach ($found as $image) {
+                $out[] = [
+                    'url' => $image['url'],
+                    'alt' => $image['alt'],
+                    'caption' => $image['alt'] !== '' ? $image['alt'] : ($image['name'] ?? ''),
+                    'page_title' => (string) $page->name,
+                    'page_url' => $pageUrl,
+                ];
+            }
+
+            return $out;
+        } catch (\Throwable) {
             return [];
         }
-
-        $found = self::extract((string) ($page->html ?? ''), (string) ($page->markdown ?? ''), $limit);
-        $found = self::appendAttachments($page, $found, $limit);
-        $found = self::appendGallery($page, $found, $limit);
-
-        $pageUrl = '';
-        try {
-            $pageUrl = (string) $page->getUrl();
-        } catch (\Throwable) {
-            $pageUrl = '';
-        }
-
-        $out = [];
-        foreach ($found as $image) {
-            $out[] = [
-                'url' => $image['url'],
-                'alt' => $image['alt'],
-                'caption' => $image['alt'] !== '' ? $image['alt'] : ($image['name'] ?? ''),
-                'page_title' => (string) $page->name,
-                'page_url' => $pageUrl,
-            ];
-        }
-
-        return $out;
     }
 
     /**

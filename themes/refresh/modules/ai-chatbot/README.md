@@ -223,6 +223,10 @@ Everything else is additive and cannot conflict.
   embeddings, so a question phrased entirely unlike the documentation may miss.
   The prompt instructs the model to retry with different wording, which covers
   most of the gap.
+- **Errors go to Sentry** when `SENTRY_LARAVEL_DSN` is set on the BookStack
+  root `.env`. That includes stream/API failures and the browser catch-all
+  (the pink "Something went wrong" banner), which otherwise never hits
+  `storage/logs`.
 - **No conversation history across tabs or sessions**, by design — see above.
 - **Images come from pages the assistant actually reads** — gallery photos,
   draw.io diagrams and image attachments on that page, permission-scoped like

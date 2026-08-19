@@ -12,8 +12,22 @@ class Prompt
      */
     public static function build(Config $config, ?User $user, array $context): string
     {
-        $appName = setting('app-name') ?: 'this wiki';
-        $userName = $user && !$user->isGuest() ? $user->name : 'a visitor';
+        $appName = 'this wiki';
+        try {
+            $name = setting('app-name');
+            if (is_string($name) && $name !== '') {
+                $appName = $name;
+            }
+        } catch (\Throwable) {
+        }
+
+        $userName = 'a visitor';
+        try {
+            if ($user && !$user->isGuest()) {
+                $userName = $user->name !== '' ? $user->name : $userName;
+            }
+        } catch (\Throwable) {
+        }
         $today = date('l, j F Y');
 
         $lines = [

@@ -211,8 +211,13 @@ class KnowledgeBase
 
         $body = ContentText::pageBody($page, $this->config->pageCharLimit());
         $location = $this->locationOf($page);
-        $images = PageImages::fromPage($page);
-        $this->recordImages($images);
+        $images = [];
+        try {
+            $images = PageImages::fromPage($page);
+            $this->recordImages($images);
+        } catch (\Throwable) {
+            $images = [];
+        }
 
         $header = "# {$page->name}";
         if ($location !== '') {

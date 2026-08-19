@@ -34,6 +34,7 @@
         "phpseclib/phpseclib": "^3.0",
         "pragmarx/google2fa": "^9.0",
         "predis/predis": "^3.2",
+        "sentry/sentry-laravel": "^4.0",
         "socialiteproviders/discord": "^4.1",
         "socialiteproviders/gitlab": "^4.1",
         "socialiteproviders/microsoft-azure": "^5.1",

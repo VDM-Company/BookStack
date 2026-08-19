@@ -5,6 +5,7 @@ namespace BookStackAiChat\Chat;
 use BookStackAiChat\Anthropic\ApiException;
 use BookStackAiChat\Anthropic\Client;
 use BookStackAiChat\Config;
+use BookStackAiChat\ErrorReport;
 use BookStackAiChat\Knowledge\KnowledgeBase;
 
 /**
@@ -94,23 +95,27 @@ class ChatAgent
             return;
         }
 
-        $sources = $this->knowledge->sources();
+        try {
+            $sources = $this->knowledge->sources();
 
-        if ($sources !== []) {
-            $emit('sources', ['sources' => $sources]);
-        }
+            if ($sources !== []) {
+                $emit('sources', ['sources' => $sources]);
+            }
 
-        $images = $this->knowledge->images();
+            $images = $this->knowledge->images();
 
-        if ($images !== []) {
-            $emit('images', ['images' => $images]);
+            if ($images !== []) {
+                $emit('images', ['images' => $images]);
+            }
+        } catch (\Throwable $exception) {
+            $this->logFailure($exception);
         }
 
         if (!$producedText) {
             $emit('notice', ['message' => 'The assistant did not produce an answer. Please try rephrasing.']);
         }
 
-        $emit('done', []);
+        $emit('done', ['ok' => true]);
     }
 
     /**
@@ -198,15 +203,8 @@ class ChatAgent
      */
     protected function logFailure(\Throwable $exception, array $messages = []): void
     {
-        $detail = $exception->getMessage();
-
-        // API error text can quote request content; keep a short, typed summary.
-        if (strlen($detail) > 400) {
-            $detail = substr($detail, 0, 400) . '…';
-        }
-
         $context = [
-            'exception' => get_class($exception),
+            'exception' => $exception::class,
             'turns' => count($messages),
         ];
 
@@ -219,7 +217,7 @@ class ChatAgent
             $context['shape'] = $this->messageShape($messages);
         }
 
-        logger()->error('AI chatbot failure: ' . $detail, $context);
+        ErrorReport::exception($exception, $context);
     }
 
     /**
