@@ -130,6 +130,47 @@
 }
 
 /**
+ * The same unclamping in the Markdown editor's preview pane.
+ *
+ * The preview is an about:blank iframe into which core clones this stylesheet
+ * (resources/js/markdown/display.ts), so the theme's typography already
+ * applies in there — but core's clamps came along with it, and the preview
+ * showed a crushed table for content the reader scrolls.
+ *
+ * No script and no marker attribute here, deliberately. The preview is redrawn
+ * on every keystroke by snabbdom via patchDomFromHtmlString, with the
+ * attributes module enabled: any attribute or class not present in the
+ * incoming HTML is stripped from the live DOM, and an element whose tag no
+ * longer matches is replaced outright. A marker would be removed on each
+ * keystroke and a wrapper thrown away, so either approach would flicker
+ * between clamped and unclamped while the author typed. CSS cannot be patched
+ * away.
+ *
+ * The cost of having no script is no measurement, so this applies to every
+ * table in the preview rather than only the ones that need it. Auto layout
+ * still fits a table into the pane whenever it can, so the visible difference
+ * for a table that fits is content-proportional columns instead of equal ones
+ * — the published page remains the authority. Horizontal scrolling comes from
+ * the preview's own documentElement, which core already gives
+ * `overflow-x: auto`.
+ */
+html.markdown-editor-display .page-content table {
+  table-layout: auto;
+  max-width: none;
+  hyphens: manual;
+}
+
+html.markdown-editor-display .page-content table > caption {
+  text-align: start;
+}
+
+html.markdown-editor-display .page-content th,
+html.markdown-editor-display .page-content td {
+  word-break: normal;
+  overflow-wrap: break-word;
+}
+
+/**
  * Edge fades.
  *
  * A translucent shadow rather than a fade to the page colour, because content
