@@ -1,0 +1,5 @@
+{
+    "name": "Google Auto-Link",
+    "description": "Logs a user straight in when their verified Google email matches an existing user account, linking the two on first use.",
+    "version": "1.0.0"
+}

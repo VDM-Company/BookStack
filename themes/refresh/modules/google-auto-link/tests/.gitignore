@@ -1,0 +1,3 @@
+# themes/.gitignore re-includes everything under refresh/**, which overrides the
+# root ignore rules, so PHPUnit's own scratch file has to be excluded here.
+.phpunit.result.cache
