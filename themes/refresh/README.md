@@ -36,8 +36,8 @@ Then `php artisan config:clear`. No build step — the compiled CSS is committed
   full-screen view with a sticky header row and an optional frozen first
   column. Only tables measured as needing the room are affected; a table that
   fits renders exactly as stock. The same tables get the same widths in the
-  WYSIWYG editor, so what is authored matches what is published. See below for
-  what "needs the room" means.
+  WYSIWYG editor, and the Markdown editor's preview scrolls them too, so what is
+  authored matches what is published. See below for what "needs the room" means.
 
 ## How it works
 
@@ -51,12 +51,12 @@ themes/refresh/
 │   ├── css/theme.css                   compiled, committed
 │   ├── js/theme.js                     two DOM hooks core doesn't emit
 │   ├── js/lightbox.js                  image lightbox
-│   ├── js/wide-tables.js               wide tables: reader + editor
+│   ├── js/wide-tables.js               wide tables: reader + WYSIWYG editor
 │   └── fonts/                          Geist + Geist Mono (SIL OFL)
 └── src/                                stylesheet source
 ```
 
-Six mechanisms do the work:
+Seven mechanisms do the work:
 
 **1. A stylesheet loaded after core's.** `custom-head.blade.php` links
 `theme.css`, which lands after `dist/styles.css` in `<head>`. Overrides at
@@ -178,6 +178,26 @@ reason.
 
 If the script fails to load, every table renders as stock BookStack, in the
 editor as well as the reader, and the editor falls back to core's typography.
+
+**7. Stylesheet-only unclamping in the Markdown editor's preview.** The preview
+is an about:blank iframe into which core clones this stylesheet, so the theme's
+typography was already reaching it — and so were core's clamps, which meant the
+preview showed a crushed table for content the reader scrolls sideways.
+
+There is no script and no marker attribute in there, deliberately. The preview
+is redrawn on every keystroke by snabbdom via `patchDomFromHtmlString` with the
+attributes module enabled: any attribute or class not present in the incoming
+HTML is stripped from the live DOM, and an element whose tag no longer matches
+is replaced outright. A marker would be removed on every keystroke and a
+wrapper thrown away, so either would flicker between clamped and unclamped
+while the author typed. A stylesheet cannot be patched away.
+
+The cost of having no script is no measurement, so the rules apply to every
+table in the preview rather than only the ones that need it. Auto layout still
+fits a table into the pane whenever it can, so for a table that fits the visible
+difference is content-proportional columns instead of equal ones. Horizontal
+scrolling comes from the preview's own documentElement, which core already gives
+`overflow-x: auto`.
 
 ## Upgrading BookStack
 
